@@ -1,0 +1,8 @@
+dist/*
+dist-newstyle/*
+*.swp
+*.swo
+*.log
+*~
+cabal.project.local
+.ghc*
