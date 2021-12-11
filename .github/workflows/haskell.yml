@@ -1,0 +1,97 @@
+name: Haskell CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  build:
+    name: GHC ${{ matrix.name }}
+    env:
+      # packcheck environment variables
+      LC_ALL: C.UTF-8
+      BUILD: ${{ matrix.build }}
+      GHCVER: ${{ matrix.ghc_version }}
+      DISABLE_DOCS: ${{ matrix.disable_docs }}
+      DISABLE_TEST: ${{ matrix.disable_test }}
+      DISABLE_DIST_CHECKS: ${{ matrix.disable_dist_checks }}
+      SDIST_OPTIONS: ${{ matrix.sdist_options }}
+      DISABLE_SDIST_BUILD: ${{ matrix.disable_sdist_build }}
+
+      # Cabal options
+      CABAL_REINIT_CONFIG: y
+      # Github has machines with 2 CPUS and 6GB memory so the cabal jobs
+      # default (ncpus) is good, this can be checked from the packcheck
+      # output in case it changes.
+      CABAL_BUILD_OPTIONS: ${{ matrix.cabal_build_options }} --flag limit-build-mem
+      CABAL_BUILD_TARGETS: ${{ matrix.cabal_build_targets }}
+      CABAL_PROJECT: ${{ matrix.cabal_project }}
+      CABAL_CHECK_RELAX: y
+
+      # packcheck location and revision
+      PACKCHECK_LOCAL_PATH: "./packcheck.sh"
+      PACKCHECK_GITHUB_URL: "https://raw.githubusercontent.com/composewell/packcheck"
+      PACKCHECK_GITHUB_COMMIT: "v0.6.0"
+
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        name:
+          - 9.2.1
+          - 9.0.1
+          - 8.10.7
+          - 9.2.1+macOS
+        include:
+          - name: 9.2.1
+            ghc_version: 9.2.1
+            build: cabal-v2
+            cabal_build_options: "--allow-newer=hsc2hs"
+            disable_sdist_build: "y"
+            runner: ubuntu-latest
+            cabal_version: 3.6
+          - name: 9.0.1
+            ghc_version: 9.0.1
+            build: cabal-v2
+            cabal_build_options: "--allow-newer=hsc2hs"
+            disable_sdist_build: "y"
+            runner: ubuntu-latest
+            cabal_version: 3.6
+          - name: 8.10.7
+            ghc_version: 8.10.7
+            build: cabal-v2
+            disable_sdist_build: "y"
+            runner: ubuntu-latest
+            cabal_version: 3.4
+          - name: 9.2.1+macOS
+            ghc_version: 9.2.1
+            build: cabal-v2
+            cabal_build_options: "--allow-newer=hsc2hs"
+            disable_sdist_build: "y"
+            runner: macOS-latest
+            cabal_version: 3.6 
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - uses: haskell/actions/setup@v1
+      with:
+        ghc-version: ${{ matrix.ghc_version }}
+        cabal-version: ${{ matrix.cabal_version }}
+
+    - uses: actions/cache@v1
+      name: Cache ~/.cabal
+      with:
+        path: ~/.cabal
+        # Bump the key version to clear the cache
+        key: ${{ runner.os }}-${{ matrix.ghc_version }}-cabal-v1
+
+    - name: Download packcheck
+      run: |
+        # Get packcheck if needed
+        CURL=$(which curl)
+        PACKCHECK_URL=${PACKCHECK_GITHUB_URL}/${PACKCHECK_GITHUB_COMMIT}/packcheck.sh
+        if test ! -e "$PACKCHECK_LOCAL_PATH"; then $CURL -sL -o "$PACKCHECK_LOCAL_PATH" $PACKCHECK_URL; fi;
+        chmod +x $PACKCHECK_LOCAL_PATH
