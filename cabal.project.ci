@@ -1,0 +1,4 @@
+packages: .
+
+package streamly-statistics
+  ghc-options: -Werror

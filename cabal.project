@@ -1,0 +1,4 @@
+packages: streamly-statistics.cabal
+
+jobs: 1
+
