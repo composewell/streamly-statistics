@@ -4,7 +4,7 @@ import Test.Hspec.QuickCheck
 import System.Random
 import Streamly
 import qualified Streamly.Prelude as S
-import Streamly.Stats
+import Streamly.Statistics
 import Prelude hiding (sum, max, min)
 
 

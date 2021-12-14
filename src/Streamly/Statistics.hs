@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 module Streamly.Statistics
   (
   -- * Types
@@ -12,13 +13,15 @@ module Streamly.Statistics
   , sum
   , mean
   , welfordMean
+  , ema
   ) where
 
 import Streamly
 import Streamly.Internal.Data.Fold.Types (Fold(..))
 import Streamly.Internal.Data.Strict
 import Control.Monad.IO.Class (MonadIO(..))
-import Foreign.Storable (Storable(..))
+import Foreign.Storable (Storable(..), sizeOf)
+import Foreign.Ptr (plusPtr)
 
 import qualified Streamly.Prelude as S
 import qualified Streamly.Memory.Ring as RB
@@ -36,7 +39,7 @@ import Data.Maybe (fromMaybe)
 -- XXX     - stdDev
 -- XXX     - skewness
 -- XXX     - kurtosis
--- XXX Refrences:
+-- XXX References:
 -- XXX     * https://www.johndcook.com/blog/standard_deviation/
 -- XXX     * https://www.johndcook.com/blog/skewness_kurtosis/
 -- XXX     * Art of Computer Programming, Volume 2: Seminumerical Algorithms (3rd Edition), Page 232
@@ -249,3 +252,45 @@ welfordMean (Finite w') = Fold step initial extract
 {-# INLINE geometricMean #-}
 geometricMean :: MonadIO m => WindowSize -> Fold m Double Double
 geometricMean ws = exp <$> FL.lmap log (mean ws)
+
+{-# INLINE ema #-}
+ema :: MonadIO m => WindowSize -> Int -> Fold m Double Double
+ema Infinite n' = Fold step initial extract
+    where
+        n = fromIntegral n'
+        a = 2 / (n + 1)
+        initial = return $ Tuple' (0 :: Int) (Nothing :: Maybe Double)
+        step (Tuple' i x') x =
+            return $ Tuple' (i + 1) $
+                case x' of
+                    Nothing -> Just x
+                    Just em -> Just ((1 - a) * em + a * x)
+        extract (Tuple' i x') = return $ fromMaybe 0 x'
+ema (Finite w') n' = Fold step initial extract
+  where
+    w = fromIntegral w'
+    n = fromIntegral n'
+    a = 2 / (n + 1)
+    initial =
+      fmap (\(a, b) -> Tuple4' a b (0 :: Int) (Nothing :: Maybe Double)) $
+      liftIO $ RB.new w'
+    step (Tuple4' rb rh i x') y
+      | i < w' = do
+        rh1 <- liftIO $ RB.unsafeInsert rb rh y
+        liftIO $ putStrLn $ show i ++ ", " ++ show y ++ ", " ++ show x'
+        return $ Tuple4' rb rh1 (i + 1) $
+            case x' of
+                Nothing -> Just y
+                Just em -> Just ((1 - a) * em + a * y)
+
+      | otherwise = do
+        x <- liftIO $ peek rh
+        let z = RB.unsafeFoldRing
+                    (rh `plusPtr` (w * sizeOf (undefined :: Double)))
+                    (\em x -> (1 - a) * em + a * x) x rb
+        rh1 <- liftIO $ RB.unsafeInsert rb rh y
+        liftIO $ putStrLn $ "->" ++ show i ++ ", " ++ show y ++ ", " ++ show x'
+        return $ Tuple4' rb rh1 (i + 1) (Just z)
+    extract (Tuple4' _ _ _ x') = return $ fromMaybe 0 x'
+
+
