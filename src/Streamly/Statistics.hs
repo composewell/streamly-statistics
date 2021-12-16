@@ -14,6 +14,8 @@ module Streamly.Statistics
   , mean
   , welfordMean
   , ema
+  , sma
+  , obv
   ) where
 
 import Streamly
@@ -27,6 +29,7 @@ import qualified Streamly.Prelude as S
 import qualified Streamly.Memory.Ring as RB
 import qualified Streamly.Data.Fold as FL
 import qualified Streamly.Internal.Data.Fold as FL
+import qualified Foreign.Storable.Record as Store
 import Data.Function ((&))
 
 import qualified Deque.Strict as DQ
@@ -34,6 +37,24 @@ import qualified Deque.Strict as DQ
 import Prelude hiding (sum, min, max)
 import qualified Prelude as P
 import Data.Maybe (fromMaybe)
+
+instance (Storable a, Storable b) => Storable (a,b) where
+   sizeOf    = Store.sizeOf storePair
+   alignment = Store.alignment storePair
+   peek      = Store.peek storePair
+   poke      = Store.poke storePair
+
+{-# INLINE storePair #-}
+storePair ::
+   (Storable a, Storable b) =>
+   Store.Dictionary (a,b)
+storePair =
+   Store.run $
+    (,)
+    <$> Store.element fst
+    <*> Store.element snd
+
+
 
 -- XXX Make the following more numerically stable. Try to extend welfordMean method.
 -- XXX     - stdDev
@@ -277,7 +298,6 @@ ema (Finite w') n' = Fold step initial extract
     step (Tuple4' rb rh i x') y
       | i < w' = do
         rh1 <- liftIO $ RB.unsafeInsert rb rh y
-        liftIO $ putStrLn $ show i ++ ", " ++ show y ++ ", " ++ show x'
         return $ Tuple4' rb rh1 (i + 1) $
             case x' of
                 Nothing -> Just y
@@ -289,8 +309,59 @@ ema (Finite w') n' = Fold step initial extract
                     (rh `plusPtr` (w * sizeOf (undefined :: Double)))
                     (\em x -> (1 - a) * em + a * x) x rb
         rh1 <- liftIO $ RB.unsafeInsert rb rh y
-        liftIO $ putStrLn $ "->" ++ show i ++ ", " ++ show y ++ ", " ++ show x'
         return $ Tuple4' rb rh1 (i + 1) (Just z)
     extract (Tuple4' _ _ _ x') = return $ fromMaybe 0 x'
+
+{-# INLINE sma #-}
+sma :: MonadIO m => WindowSize -> Fold m Double Double
+sma = welfordMean
+
+{-# INLINE obv #-}
+obv :: MonadIO m => WindowSize -> Fold m (Double, Double) Double
+obv Infinite = Fold step initial extract
+    where
+        initial = return $ Tuple' (0 :: Double) (Nothing :: Maybe Double)
+        step (Tuple' close' acc') (close, volume) = do
+            liftIO $ print acc'
+            return $ Tuple' close $
+                case acc' of
+                    Nothing -> Just 0
+                    Just acc -> Just $
+                        case compare close close' of
+                            GT -> acc + volume
+                            LT -> acc - volume
+                            EQ -> 0
+        extract (Tuple' _ acc) = return (fromMaybe 0 acc)
+obv (Finite w') = Fold step initial extract
+  where
+    w = fromIntegral w'
+    initial =
+      fmap (\(a, b) -> Tuple5' a b (0 :: Int) (0 :: Double) (Nothing :: Maybe Double)) $
+      liftIO $ RB.new w'
+    step (Tuple5' rb rh i close' acc') (close, volume)
+      | i < w' = do
+        let (bl, acc) =
+                case acc' of
+                    Nothing -> (0, 0)
+                    Just z -> case compare close close' of
+                                GT -> (-volume, z + volume)
+                                LT -> (volume, z - volume)
+                                EQ -> (z, 0)
+        rh1 <- liftIO $ RB.unsafeInsert rb rh bl
+        return $ Tuple5' rb rh1 (i + 1) close (Just acc)
+
+      | otherwise = do
+        x <- liftIO $ peek (rh `plusPtr` sizeOf (undefined :: Double))
+        let (bl, acc) =
+                case acc' of
+                    Nothing -> (0, 0)
+                    Just y -> case compare close close' of
+                                GT -> (-volume, z + volume)
+                                LT -> (volume, z - volume)
+                                EQ -> (z, 0)
+                                where z = y + x
+        rh1 <- liftIO $ RB.unsafeInsert rb rh bl
+        return $ Tuple5' rb rh1 (i + 1) close (Just acc)
+    extract (Tuple5' _ _ _ _ x') = return $ fromMaybe 0 x'
 
 
