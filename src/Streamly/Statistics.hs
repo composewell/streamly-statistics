@@ -29,7 +29,6 @@ import qualified Streamly.Prelude as S
 import qualified Streamly.Memory.Ring as RB
 import qualified Streamly.Data.Fold as FL
 import qualified Streamly.Internal.Data.Fold as FL
-import qualified Foreign.Storable.Record as Store
 import Data.Function ((&))
 
 import qualified Deque.Strict as DQ
@@ -37,24 +36,6 @@ import qualified Deque.Strict as DQ
 import Prelude hiding (sum, min, max)
 import qualified Prelude as P
 import Data.Maybe (fromMaybe)
-
-instance (Storable a, Storable b) => Storable (a,b) where
-   sizeOf    = Store.sizeOf storePair
-   alignment = Store.alignment storePair
-   peek      = Store.peek storePair
-   poke      = Store.poke storePair
-
-{-# INLINE storePair #-}
-storePair ::
-   (Storable a, Storable b) =>
-   Store.Dictionary (a,b)
-storePair =
-   Store.run $
-    (,)
-    <$> Store.element fst
-    <*> Store.element snd
-
-
 
 -- XXX Make the following more numerically stable. Try to extend welfordMean method.
 -- XXX     - stdDev
@@ -246,55 +227,67 @@ kurtosis ws =
 {-# INLINE welfordMean #-}
 welfordMean :: MonadIO m => WindowSize -> Fold m Double Double
 welfordMean Infinite = Fold step (return begin) (return . done)
-  where
+
+    where
+
     begin = Tuple' (0 :: Double) (0 :: Double)
     step (Tuple' x n) y =
-      return $
-      let n' = n + 1
-       in Tuple' (x + (y - x) / n') n'
+        return $
+        let n' = n + 1
+        in Tuple' (x + (y - x) / n') n'
     done (Tuple' x _) = x
+
 welfordMean (Finite w') = Fold step initial extract
-  where
+
+    where
+
     w = fromIntegral w'
     initial =
-      fmap (\(a, b) -> Tuple5' a b (0 :: Int) (0 :: Double) (0 :: Double)) $
-      liftIO $ RB.new w'
+        fmap (\(a, b) -> Tuple5' a b (0 :: Int) (0 :: Double) (0 :: Double)) $
+            liftIO $ RB.new w'
     step (Tuple5' rb rh i x n) y
-      | i < w' = do
-        rh1 <- liftIO $ RB.unsafeInsert rb rh y
-        let n' = n + 1
-        return $ Tuple5' rb rh1 (i + 1) (x + (y - x) / n') n'
-      | otherwise = do
-        a' <- liftIO $ peek rh
-        rh1 <- liftIO $ RB.unsafeInsert rb rh y
-        return $ Tuple5' rb rh1 (i + 1) (x + (y - x) / w + (x - a') / w) n
+        | i < w' = do
+          rh1 <- liftIO $ RB.unsafeInsert rb rh y
+          let n' = n + 1
+          return $ Tuple5' rb rh1 (i + 1) (x + (y - x) / n') n'
+        | otherwise = do
+          a' <- liftIO $ peek rh
+          rh1 <- liftIO $ RB.unsafeInsert rb rh y
+          return $ Tuple5' rb rh1 (i + 1) (x + (y - x) / w + (x - a') / w) n
     extract (Tuple5' _ _ _ t _) = return t
 
 {-# INLINE geometricMean #-}
 geometricMean :: MonadIO m => WindowSize -> Fold m Double Double
 geometricMean ws = exp <$> FL.lmap log (mean ws)
 
+-- | Exponential Moving Average.
+-- https://en.wikipedia.org/wiki/Moving_average#Exponential_moving_average
 {-# INLINE ema #-}
 ema :: MonadIO m => WindowSize -> Int -> Fold m Double Double
 ema Infinite n' = Fold step initial extract
+
     where
-        n = fromIntegral n'
-        a = 2 / (n + 1)
-        initial = return $ Tuple' (0 :: Int) (Nothing :: Maybe Double)
-        step (Tuple' i x') x =
-            return $ Tuple' (i + 1) $
-                case x' of
-                    Nothing -> Just x
-                    Just em -> Just ((1 - a) * em + a * x)
-        extract (Tuple' i x') = return $ fromMaybe 0 x'
+
+    n = fromIntegral n'
+    a = 2 / (n + 1)
+    initial = return $ Tuple' (0 :: Int) (Nothing :: Maybe Double)
+    step (Tuple' i x') x =
+        return $ Tuple' (i + 1) $
+            case x' of
+                Nothing -> Just x
+                Just em -> Just ((1 - a) * em + a * x)
+    extract (Tuple' i x') = return $ fromMaybe 0 x'
+
 ema (Finite w') n' = Fold step initial extract
-  where
+
+    where
+
     w = fromIntegral w'
     n = fromIntegral n'
     a = 2 / (n + 1)
     initial =
       fmap (\(a, b) -> Tuple4' a b (0 :: Int) (Nothing :: Maybe Double)) $
-      liftIO $ RB.new w'
+        liftIO $ RB.new w'
     step (Tuple4' rb rh i x') y
       | i < w' = do
         rh1 <- liftIO $ RB.unsafeInsert rb rh y
@@ -312,56 +305,71 @@ ema (Finite w') n' = Fold step initial extract
         return $ Tuple4' rb rh1 (i + 1) (Just z)
     extract (Tuple4' _ _ _ x') = return $ fromMaybe 0 x'
 
+-- | Simple Moving Average.
+-- https://en.wikipedia.org/wiki/Moving_average#Simple_moving_average
 {-# INLINE sma #-}
 sma :: MonadIO m => WindowSize -> Fold m Double Double
 sma = welfordMean
 
+-- | On Balance Volume.
+-- https://www.investopedia.com/terms/o/onbalancevolume.asp
+--
+-- Fold operatoes on a stream of (Double, Double) where the first value is
+-- the closing price and the second value is the trading volume
 {-# INLINE obv #-}
 obv :: MonadIO m => WindowSize -> Fold m (Double, Double) Double
 obv Infinite = Fold step initial extract
+
     where
-        initial = return $ Tuple' (0 :: Double) (Nothing :: Maybe Double)
-        step (Tuple' close' acc') (close, volume) = do
-            liftIO $ print acc'
-            return $ Tuple' close $
-                case acc' of
-                    Nothing -> Just 0
-                    Just acc -> Just $
-                        case compare close close' of
-                            GT -> acc + volume
-                            LT -> acc - volume
-                            EQ -> 0
-        extract (Tuple' _ acc) = return (fromMaybe 0 acc)
+
+    initial = return $ Tuple' (0 :: Double) (Nothing :: Maybe Double)
+    step (Tuple' close' acc') (close, volume) = do
+        return $ Tuple' close $
+            case acc' of
+                Nothing -> Just 0
+                Just acc -> Just $
+                    case compare close close' of
+                        GT -> acc + volume
+                        LT -> acc - volume
+                        EQ -> 0
+    extract (Tuple' _ acc) = return (fromMaybe 0 acc)
+
 obv (Finite w') = Fold step initial extract
-  where
+
+    where
+
     w = fromIntegral w'
-    initial =
-      fmap (\(a, b) -> Tuple5' a b (0 :: Int) (0 :: Double) (Nothing :: Maybe Double)) $
-      liftIO $ RB.new w'
+    initial = fmap
+                (\(a, b) -> Tuple5' a b (0 :: Int) (0 :: Double)
+                    (Nothing :: Maybe Double))
+                $ liftIO $ RB.new w'
     step (Tuple5' rb rh i close' acc') (close, volume)
-      | i < w' = do
-        let (bl, acc) =
-                case acc' of
-                    Nothing -> (0, 0)
-                    Just z -> case compare close close' of
+        | i < w' = do
+            let (bl, acc) =
+                    case acc' of
+                        Nothing -> (0, 0)
+                        Just z ->
+                            case compare close close' of
                                 GT -> (-volume, z + volume)
                                 LT -> (volume, z - volume)
                                 EQ -> (z, 0)
-        rh1 <- liftIO $ RB.unsafeInsert rb rh bl
-        return $ Tuple5' rb rh1 (i + 1) close (Just acc)
+            rh1 <- liftIO $ RB.unsafeInsert rb rh bl
+            return $ Tuple5' rb rh1 (i + 1) close (Just acc)
 
       | otherwise = do
-        x <- liftIO $ peek (rh `plusPtr` sizeOf (undefined :: Double))
-        let (bl, acc) =
-                case acc' of
-                    Nothing -> (0, 0)
-                    Just y -> case compare close close' of
+            x <- liftIO $ peek (rh `plusPtr` sizeOf (undefined :: Double))
+            let (bl, acc) =
+                    case acc' of
+                        Nothing -> (0, 0)
+                        Just y ->
+                            case compare close close' of
                                 GT -> (-volume, z + volume)
                                 LT -> (volume, z - volume)
                                 EQ -> (z, 0)
+
                                 where z = y + x
-        rh1 <- liftIO $ RB.unsafeInsert rb rh bl
-        return $ Tuple5' rb rh1 (i + 1) close (Just acc)
+            rh1 <- liftIO $ RB.unsafeInsert rb rh bl
+            return $ Tuple5' rb rh1 (i + 1) close (Just acc)
     extract (Tuple5' _ _ _ _ x') = return $ fromMaybe 0 x'
 
 
