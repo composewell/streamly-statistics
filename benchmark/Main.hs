@@ -1,15 +1,13 @@
 import Gauge
 
-import Streamly
-
 import System.Random (randomRIO)
 import Streamly.Data.Fold (Fold)
 
-import qualified Streamly.Stats as SS
+import qualified Streamly.Statistics as Statistics
 import qualified Streamly.Prelude as S
 
 {-# INLINE source #-}
-source :: (Monad m, IsStream t) => Int -> Int -> t m Double
+source :: (Monad m, S.IsStream t) => Int -> Int -> t m Double
 source len from =
   S.enumerateFromTo (fromIntegral from) (fromIntegral (from + len))
 
@@ -28,8 +26,8 @@ numElements :: Int
 numElements = 100000
 
 {-# INLINE windowSize #-}
-windowSize :: SS.WindowSize
-windowSize = SS.Finite 100
+windowSize :: Statistics.WindowSize
+windowSize = Statistics.Finite 100
 
 main :: IO ()
 main =
@@ -38,54 +36,54 @@ main =
         "finite"
         [ bgroup
             "fold"
-            [ benchWithFold numElements "min" (SS.min windowSize)
-            , benchWithFold numElements "max" (SS.max windowSize)
-            , benchWithFold numElements "range" (SS.range windowSize)
-            , benchWithFold numElements "sum" (SS.sum windowSize)
-            , benchWithFold numElements "mean" (SS.mean windowSize)
+            [ benchWithFold numElements "min" (Statistics.min windowSize)
+            , benchWithFold numElements "max" (Statistics.max windowSize)
+            , benchWithFold numElements "range" (Statistics.range windowSize)
+            , benchWithFold numElements "sum" (Statistics.sum windowSize)
+            , benchWithFold numElements "mean" (Statistics.mean windowSize)
             , benchWithFold
                 numElements
                 "welfordMean"
-                (SS.welfordMean windowSize)
+                (Statistics.welfordMean windowSize)
             ]
         , bgroup
             "scan"
-            [ benchWithScan numElements "min" (SS.min windowSize)
-            , benchWithScan numElements "max" (SS.max windowSize)
-            , benchWithScan numElements "range" (SS.range windowSize)
-            , benchWithScan numElements "sum" (SS.sum windowSize)
-            , benchWithScan numElements "mean" (SS.mean windowSize)
+            [ benchWithScan numElements "min" (Statistics.min windowSize)
+            , benchWithScan numElements "max" (Statistics.max windowSize)
+            , benchWithScan numElements "range" (Statistics.range windowSize)
+            , benchWithScan numElements "sum" (Statistics.sum windowSize)
+            , benchWithScan numElements "mean" (Statistics.mean windowSize)
             , benchWithScan
                 numElements
                 "welfordMean"
-                (SS.welfordMean windowSize)
+                (Statistics.welfordMean windowSize)
             ]
         ]
     , bgroup
         "infinite"
         [ bgroup
             "fold"
-            [ benchWithFold numElements "min" (SS.min SS.Infinite)
-            , benchWithFold numElements "max" (SS.max SS.Infinite)
-            , benchWithFold numElements "range" (SS.range SS.Infinite)
-            , benchWithFold numElements "sum" (SS.sum SS.Infinite)
-            , benchWithFold numElements "mean" (SS.mean SS.Infinite)
+            [ benchWithFold numElements "min" (Statistics.min Statistics.Infinite)
+            , benchWithFold numElements "max" (Statistics.max Statistics.Infinite)
+            , benchWithFold numElements "range" (Statistics.range Statistics.Infinite)
+            , benchWithFold numElements "sum" (Statistics.sum Statistics.Infinite)
+            , benchWithFold numElements "mean" (Statistics.mean Statistics.Infinite)
             , benchWithFold
                 numElements
                 "welfordMean"
-                (SS.welfordMean SS.Infinite)
+                (Statistics.welfordMean Statistics.Infinite)
             ]
         , bgroup
             "scan"
-            [ benchWithScan numElements "min" (SS.min SS.Infinite)
-            , benchWithScan numElements "max" (SS.max SS.Infinite)
-            , benchWithScan numElements "range" (SS.range SS.Infinite)
-            , benchWithScan numElements "sum" (SS.sum SS.Infinite)
-            , benchWithScan numElements "mean" (SS.mean SS.Infinite)
+            [ benchWithScan numElements "min" (Statistics.min Statistics.Infinite)
+            , benchWithScan numElements "max" (Statistics.max Statistics.Infinite)
+            , benchWithScan numElements "range" (Statistics.range Statistics.Infinite)
+            , benchWithScan numElements "sum" (Statistics.sum Statistics.Infinite)
+            , benchWithScan numElements "mean" (Statistics.mean Statistics.Infinite)
             , benchWithScan
                 numElements
                 "welfordMean"
-                (SS.welfordMean SS.Infinite)
+                (Statistics.welfordMean Statistics.Infinite)
             ]
         ]
     ]

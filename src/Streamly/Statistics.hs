@@ -14,16 +14,16 @@ module Streamly.Statistics
   , welfordMean
   ) where
 
-import Streamly
-import Streamly.Internal.Data.Fold.Types (Fold(..))
-import Streamly.Internal.Data.Strict
+import Streamly.Internal.Data.Fold.Type (Fold(..), Step(..))
+import Streamly.Internal.Data.Tuple.Strict
+import Streamly.Data.Fold.Tee(Tee(..), toFold)
 import Control.Monad.IO.Class (MonadIO(..))
 import Foreign.Storable (Storable(..))
 
-import qualified Streamly.Prelude as S
-import qualified Streamly.Memory.Ring as RB
-import qualified Streamly.Data.Fold as FL
-import qualified Streamly.Internal.Data.Fold as FL
+import qualified Streamly.Prelude as Stream
+import qualified Streamly.Internal.Ring.Foreign as Ring
+import qualified Streamly.Data.Fold as Fold
+import qualified Streamly.Internal.Data.Fold as Fold
 import Data.Function ((&))
 
 import qualified Deque.Strict as DQ
@@ -55,23 +55,22 @@ data Tuple5' a b c d e = Tuple5' !a !b !c !d !e deriving Show
 -- | Range. The difference between the largest and smallest elements of a sample.
 {-# INLINE range #-}
 range :: Monad m => WindowSize -> Fold m Double Double
-range ws = (-) <$> max ws <*> min ws
+range ws = Fold.teeWith (-) (max ws) (min ws)
 
 -- | The minimum element in the sample.
 {-# INLINE min #-}
 min :: Monad m => WindowSize -> Fold m Double Double
-min Infinite = Fold step initial extract
+min Infinite = Fold.foldl' step initial 
   where
-    initial = return $ 1 / 0
+    initial = 1 / 0
     step ma a
-      | a < ma = return a
-      | otherwise = return ma
-    extract = return
+      | a < ma = a
+      | otherwise = ma
 min (Finite w) = Fold step initial extract
   where
-    initial = return $ Tuple' (0 :: Int) (mempty :: DQ.Deque (Int, Double))
+    initial = return $ Partial $ Tuple' (0 :: Int) (mempty :: DQ.Deque (Int, Double))
     step (Tuple' i q) a =
-      return $ Tuple' (i + 1) (headCheck i q & dqloop (i, a))
+      return $ Partial $ Tuple' (i + 1) (headCheck i q & dqloop (i, a))
     {-# INLINE headCheck #-}
     headCheck i q =
       case DQ.uncons q of
@@ -93,18 +92,17 @@ min (Finite w) = Fold step initial extract
 -- | The maximum element in the sample.
 {-# INLINE max #-}
 max :: Monad m => WindowSize -> Fold m Double Double
-max Infinite = Fold step initial extract
+max Infinite = Fold.foldl' step initial 
   where
-    initial = return $ -1 / 0
+    initial = -1 / 0
     step ma a
-      | a > ma = return a
-      | otherwise = return ma
-    extract = return
+      | a > ma = a
+      | otherwise = ma
 max (Finite w) = Fold step initial extract
   where
-    initial = return $ Tuple' (0 :: Int) (mempty :: DQ.Deque (Int, Double))
+    initial = return $ Partial $ Tuple' (0 :: Int) (mempty :: DQ.Deque (Int, Double))
     step (Tuple' i q) a =
-      return $ Tuple' (i + 1) (headCheck i q & dqloop (i, a))
+      return $ Partial $ Tuple' (i + 1) (headCheck i q & dqloop (i, a))
     {-# INLINE headCheck #-}
     headCheck i q =
       case DQ.uncons q of
@@ -128,61 +126,71 @@ max (Finite w) = Fold step initial extract
 {-# INLINE sum #-}
 sum :: MonadIO m => WindowSize -> Fold m Double Double
 sum Infinite = Fold step initial extract
+
   where
-    initial = return $ Tuple' (0 :: Double) (0 :: Double)
-    step (Tuple' s c) a =
+
+  initial = return $ Partial $ Tuple' (0 :: Double) (0 :: Double)
+
+  step (Tuple' s c) a =
+    let y = a - c
+        t = s + y
+        c' = (t - s) - y
+      in return $ Partial $ Tuple' t c'
+
+  extract (Tuple' s _) = return s
+
+sum (Finite w) = Fold step initial extract
+
+  where
+
+  initial =
+    fmap (\(a, b) -> Partial $ Tuple5' a b (0 :: Int) (0 :: Double) (0 :: Double)) $
+    liftIO $ Ring.new w
+
+  step (Tuple5' rb rh i s c) a
+    | i < w = do
       let y = a - c
           t = s + y
           c' = (t - s) - y
-       in return $ Tuple' t c'
-    extract (Tuple' s _) = return s
-sum (Finite w) = Fold step initial extract
-  where
-    initial =
-      fmap (\(a, b) -> Tuple5' a b (0 :: Int) (0 :: Double) (0 :: Double)) $
-      liftIO $ RB.new w
-    step (Tuple5' rb rh i s c) a
-      | i < w = do
-        let y = a - c
-            t = s + y
-            c' = (t - s) - y
-        rh1 <- liftIO $ RB.unsafeInsert rb rh (a + c')
-        return $ Tuple5' rb rh1 (i + 1) t c'
-      | otherwise = do
-        a' <- liftIO $ peek rh
-        let s' = s - a'
-            y = a - c
-            t = s' + y
-            c' = (t - s') - y
-        rh1 <- liftIO $ RB.unsafeInsert rb rh (a + c')
-        return $ Tuple5' rb rh1 i t c'
-    extract (Tuple5' _ _ _ t _) = return t
+      rh1 <- liftIO $ Ring.unsafeInsert rb rh (a + c')
+      return $ Partial $ Tuple5' rb rh1 (i + 1) t c'
+    | otherwise = do
+      a' <- liftIO $ peek rh
+      let s' = s - a'
+          y = a - c
+          t = s' + y
+          c' = (t - s') - y
+      rh1 <- liftIO $ Ring.unsafeInsert rb rh (a + c')
+      return $ Partial $ Tuple5' rb rh1 i t c'
+
+  extract (Tuple5' _ _ _ t _) = return t
 
 -- | Arithmetic mean. This uses Kahan-Babuska-Neumaier
 -- summation, so is more accurate than 'welfordMean' unless the input
 -- values are very large.
 {-# INLINE mean #-}
 mean :: MonadIO m => WindowSize -> Fold m Double Double
-mean ws@(Infinite) =
-  (\a b -> a / b) <$> sum ws <*> fmap (\x -> fromIntegral x) FL.length
+mean ws@Infinite =
+  Fold.teeWith (/) (sum ws) (fmap fromIntegral Fold.length)
 mean ws@(Finite w) =
-  (\a b -> a / b) <$> sum ws <*> fmap (\x -> fromIntegral (P.min w x)) FL.length
+  Fold.teeWith (/) (sum ws) (fmap (fromIntegral . P.min w) Fold.length)
 
 {-# INLINE powerSum #-}
 powerSum :: MonadIO m => WindowSize -> Int -> Fold m Double Double
-powerSum ws i = FL.lmap (\x -> x ^ i) $ sum ws
+powerSum ws i = Fold.lmap (^ i) $ sum ws
 
 {-# INLINE powerSumAvg #-}
 powerSumAvg :: MonadIO m => WindowSize -> Int -> Fold m Double Double
 powerSumAvg ws@(Finite w) i =
-  (\x n -> x / n) <$> powerSum ws i <*>
-  fmap (\x -> fromIntegral (P.min w x)) FL.length
-powerSumAvg ws@(Infinite) i =
-  (\x n -> x / n) <$> powerSum ws i <*> fmap (\x -> fromIntegral x) FL.length
+  Fold.teeWith (/) (powerSum ws i)
+  (fmap (fromIntegral . P.min w) Fold.length)
+powerSumAvg ws@Infinite i =
+  Fold.teeWith (/) (powerSum ws i)
+  (fmap fromIntegral Fold.length)
 
 {-# INLINE variance #-}
 variance :: MonadIO m => WindowSize -> Fold m Double Double
-variance ws = (\p2 m -> p2 - m ^ 2) <$> powerSumAvg ws 2 <*> mean ws
+variance ws = Fold.teeWith (\p2 m -> p2 - m ^ 2) (powerSumAvg ws 2) (mean ws)
 
 {-# INLINE stdDev #-}
 stdDev :: MonadIO m => WindowSize -> Fold m Double Double
@@ -191,28 +199,31 @@ stdDev ws = sqrt <$> variance ws
 {-# INLINE stdErrMean #-}
 stdErrMean :: MonadIO m => WindowSize -> Int -> Fold m Double Double
 stdErrMean ws@(Finite w) i =
-  (\sd n -> sd / (sqrt . fromIntegral) n) <$> stdDev ws <*>
-  fmap (\x -> fromIntegral (P.min w x)) FL.length
+  Fold.teeWith (\sd n -> sd / (sqrt . fromIntegral) n) (stdDev ws)
+  (fmap (\x -> fromIntegral (P.min w x)) Fold.length)
 stdErrMean ws@(Infinite) i =
-  (\sd n -> sd / (sqrt . fromIntegral) n) <$> stdDev ws <*>
-  fmap (\x -> fromIntegral x) FL.length
+  Fold.teeWith (\sd n -> sd / (sqrt . fromIntegral) n) (stdDev ws)
+  (fmap (\x -> fromIntegral x) Fold.length)
 
 {-# INLINE skewness #-}
 skewness :: MonadIO m => WindowSize -> Fold m Double Double
 skewness ws =
-  (\p3 sd m -> p3 / sd ^ 3 - 3 * (m / sd) - (m / sd) ^ 3) <$> powerSumAvg ws 3 <*>
-  stdDev ws <*>
-  mean ws
+  toFold $
+  (\p3 sd m -> p3 / sd ^ 3 - 3 * (m / sd) - (m / sd) ^ 3)
+  <$> Tee (powerSumAvg ws 3)
+  <*> Tee (stdDev ws)
+  <*> Tee (mean ws)
 
 {-# INLINE kurtosis #-}
 kurtosis :: MonadIO m => WindowSize -> Fold m Double Double
 kurtosis ws =
+  toFold $
   (\p4 p3 sd m ->
-     p4 / sd ^ 4 - 4 * ((m / sd) * (p3 / sd ^ 3)) - 3 * ((m / sd) ^ 4)) <$>
-  powerSumAvg ws 4 <*>
-  powerSumAvg ws 3 <*>
-  stdDev ws <*>
-  mean ws
+     p4 / sd ^ 4 - 4 * ((m / sd) * (p3 / sd ^ 3)) - 3 * ((m / sd) ^ 4))
+  <$> Tee (powerSumAvg ws 4)
+  <*> Tee (powerSumAvg ws 3)
+  <*> Tee (stdDev ws)
+  <*> Tee (mean ws)
 
 -- | Arithmetic mean. This uses Welford's algorithm to provide
 -- numerical stability, using a single pass over the sample data.
@@ -222,30 +233,39 @@ kurtosis ws =
 {-# INLINE welfordMean #-}
 welfordMean :: MonadIO m => WindowSize -> Fold m Double Double
 welfordMean Infinite = Fold step (return begin) (return . done)
+
   where
-    begin = Tuple' (0 :: Double) (0 :: Double)
-    step (Tuple' x n) y =
-      return $
-      let n' = n + 1
-       in Tuple' (x + (y - x) / n') n'
-    done (Tuple' x _) = x
+
+  begin = Partial $ Tuple' (0 :: Double) (0 :: Double)
+
+  step (Tuple' x n) y =
+    return $
+    let n' = n + 1
+      in Partial $ Tuple' (x + (y - x) / n') n'
+  done (Tuple' x _) = x
+
 welfordMean (Finite w') = Fold step initial extract
+
   where
-    w = fromIntegral w'
-    initial =
-      fmap (\(a, b) -> Tuple5' a b (0 :: Int) (0 :: Double) (0 :: Double)) $
-      liftIO $ RB.new w'
-    step (Tuple5' rb rh i x n) y
-      | i < w' = do
-        rh1 <- liftIO $ RB.unsafeInsert rb rh y
-        let n' = n + 1
-        return $ Tuple5' rb rh1 (i + 1) (x + (y - x) / n') n'
-      | otherwise = do
-        a' <- liftIO $ peek rh
-        rh1 <- liftIO $ RB.unsafeInsert rb rh y
-        return $ Tuple5' rb rh1 (i + 1) (x + (y - x) / w + (x - a') / w) n
-    extract (Tuple5' _ _ _ t _) = return t
+
+  w = fromIntegral w'
+
+  initial =
+    fmap (\(a, b) -> Fold.Partial $ Tuple5' a b (0 :: Int) (0 :: Double) (0 :: Double)) $
+    liftIO $ Ring.new w'
+
+  step (Tuple5' rb rh i x n) y
+    | i < w' = do
+      rh1 <- liftIO $ Ring.unsafeInsert rb rh y
+      let n' = n + 1
+      return $ Partial $ Tuple5' rb rh1 (i + 1) (x + (y - x) / n') n'
+    | otherwise = do
+      a' <- liftIO $ peek rh
+      rh1 <- liftIO $ Ring.unsafeInsert rb rh y
+      return $ Partial $ Tuple5' rb rh1 (i + 1) (x + (y - x) / w + (x - a') / w) n
+
+  extract (Tuple5' _ _ _ t _) = return t
 
 {-# INLINE geometricMean #-}
 geometricMean :: MonadIO m => WindowSize -> Fold m Double Double
-geometricMean ws = exp <$> FL.lmap log (mean ws)
+geometricMean ws = exp <$> Fold.lmap log (mean ws)
