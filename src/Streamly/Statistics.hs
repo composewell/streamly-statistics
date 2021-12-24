@@ -60,7 +60,10 @@ range ws = Fold.teeWith (-) (max ws) (min ws)
 -- | The minimum element in the sample.
 {-# INLINE min #-}
 min :: Monad m => WindowSize -> Fold m Double Double
-min Infinite = Fold.foldl' step initial 
+min Infinite = Fold.teeWith 
+                (\a b -> if a then error "Empty List" else b) 
+                Fold.null 
+                (Fold.foldl' step initial )
   where
     initial = 1 / 0
     step ma a
