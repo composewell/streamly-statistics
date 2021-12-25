@@ -38,28 +38,35 @@ let haskellPackages =
                 {
                     streamly-statistics = mkPackage super "streamly-statistics" ./. flags inShell;
 
-                    #streamly =
-                    #  nixpkgs.haskell.lib.overrideCabal
-                    #    (super.callHackageDirect
-                    #      { pkg = "streamly";
-                    #        ver = "0.8.0";
-                    #        sha256 = "0vy2lkljizlhpbpbybmg9jcmj2g4s1aaqd2dzy5c0y0n4rgwxask";
-                    #      } {})
-                    #    (old:
-                    #      { librarySystemDepends =
-                    #          if builtins.currentSystem == "x86_64-darwin"
-                    #          then [nixpkgs.darwin.apple_sdk.frameworks.Cocoa]
-                    #          else [];
-                    #        enableLibraryProfiling = false;
-                    #        doHaddock = false;
-                    #      });
+                    streamly =
+                      nixpkgs.haskell.lib.overrideCabal
+                        (super.callHackageDirect
+                          { pkg = "streamly";
+                            ver = "0.8.1";
+                            sha256 = "0ywyy7gxjnp32hx8kki0lfn94bnc9mzjh8g6mg65ff3vv28k2vdr";
+                          } {})
+                        (old:
+                          { librarySystemDepends =
+                              if builtins.currentSystem == "x86_64-darwin"
+                              then [nixpkgs.darwin.apple_sdk.frameworks.Cocoa]
+                              else [];
+                            enableLibraryProfiling = false;
+                            doHaddock = false;
+                          });
 
-                    #tasty-bench =
-                    #  super.callHackageDirect
-                    #    { pkg = "tasty-bench";
-                    #      ver = "0.3";
-                    #      sha256 = "0na1q52zr8p1zz8hby4242yjr2zma3js4n91avl7ibsa2y51vrc4";
-                    #    } {};
+                    unicode-data =
+                      super.callHackageDirect
+                        { pkg = "unicode-data";
+                          ver = "0.2.0";
+                          sha256 = "14crb68g79yyw87fgh49z2fn4glqx0zr53v6mapihaxzkikhkkc3";
+                        } {};
+
+                    tasty-bench =
+                      super.callHackageDirect
+                        { pkg = "tasty-bench";
+                          ver = "0.3";
+                          sha256 = "0na1q52zr8p1zz8hby4242yjr2zma3js4n91avl7ibsa2y51vrc4";
+                        } {};
                 };
         };
 
