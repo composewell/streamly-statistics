@@ -21,7 +21,7 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Foreign.Storable (Storable(..))
 
 import qualified Streamly.Prelude as Stream
-import qualified Streamly.Internal.Ring.Foreign as Ring
+import qualified Streamly.Internal.Data.Ring.Foreign as Ring
 import qualified Streamly.Data.Fold as Fold
 import qualified Streamly.Internal.Data.Fold as Fold
 import Data.Function ((&))
@@ -52,74 +52,91 @@ data WindowSize
 
 data Tuple5' a b c d e = Tuple5' !a !b !c !d !e deriving Show
 
--- | Range. The difference between the largest and smallest elements of a sample.
-{-# INLINE range #-}
-range :: Monad m => WindowSize -> Fold m Double Double
-range ws = Fold.teeWith (-) (max ws) (min ws)
-
--- | The minimum element in the sample.
+-- | The minimum element in the window.
 {-# INLINE min #-}
-min :: Monad m => WindowSize -> Fold m Double Double
-min Infinite = Fold.foldl' step initial 
-  where
-    initial = 1 / 0
-    step ma a
-      | a < ma = a
-      | otherwise = ma
-min (Finite w) = Fold step initial extract
-  where
-    initial = return $ Partial $ Tuple' (0 :: Int) (mempty :: DQ.Deque (Int, Double))
-    step (Tuple' i q) a =
-      return $ Partial $ Tuple' (i + 1) (headCheck i q & dqloop (i, a))
-    {-# INLINE headCheck #-}
-    headCheck i q =
-      case DQ.uncons q of
-        Nothing -> q
-        Just (ia', q') ->
-          if fst ia' <= i - w
-            then q'
-            else q
-    dqloop ia q =
-      case DQ.unsnoc q of
-        Nothing -> DQ.snoc ia q
-      -- XXX This can be improved for the case of `=`
-        Just (ia', q') ->
-          if snd ia <= snd ia'
-            then dqloop ia q'
-            else DQ.snoc ia q
-    extract (Tuple' _ q) = return $ snd $ fromMaybe (0, 1 / 0) $ DQ.head q
+min :: (Monad m, Num a, Ord a, Storable a) => Fold m (a, Maybe a) a
+min = Fold step initial extract
 
--- | The maximum element in the sample.
+  where
+
+  initial = return $ Partial $ Tuple3' (0 :: Int) (0 :: Int)
+                (mempty :: DQ.Deque (Int, a))
+
+  step (Tuple3' i w q) (a, ma) =
+    case ma of
+      Nothing ->
+        return $ Partial $ Tuple3' (i + 1) (w + 1)
+            (headCheck i q (w + 1) & dqloop (i, a))
+      Just old ->
+        return $ Partial $ Tuple3' (i + 1) w (headCheck i q w & dqloop (i,a))
+
+  {-# INLINE headCheck #-}
+  headCheck i q w =
+    case DQ.uncons q of
+      Nothing -> q
+      Just (ia', q') ->
+        if fst ia' <= i - w
+          then q'
+          else q
+
+  dqloop ia q =
+    case DQ.unsnoc q of
+      Nothing -> DQ.snoc ia q
+    -- XXX This can be improved for the case of `=`
+      Just (ia', q') ->
+        if snd ia <= snd ia'
+          then dqloop ia q'
+          else DQ.snoc ia q
+
+  extract (Tuple3' _ _ q) = return $ snd
+                            $ fromMaybe (0, error "min: Empty Stream")
+                            $ DQ.head q
+
+-- | The maximum element in the window.
 {-# INLINE max #-}
-max :: Monad m => WindowSize -> Fold m Double Double
-max Infinite = Fold.foldl' step initial 
+max :: (Monad m, Num a, Ord a, Storable a) => Fold m (a, Maybe a) a
+max = Fold step initial extract
+
   where
-    initial = -1 / 0
-    step ma a
-      | a > ma = a
-      | otherwise = ma
-max (Finite w) = Fold step initial extract
-  where
-    initial = return $ Partial $ Tuple' (0 :: Int) (mempty :: DQ.Deque (Int, Double))
-    step (Tuple' i q) a =
-      return $ Partial $ Tuple' (i + 1) (headCheck i q & dqloop (i, a))
-    {-# INLINE headCheck #-}
-    headCheck i q =
-      case DQ.uncons q of
-        Nothing -> q
-        Just (ia', q') ->
-          if fst ia' <= i - w
-            then q'
-            else q
-    dqloop ia q =
-      case DQ.unsnoc q of
-        Nothing -> DQ.snoc ia q
-      -- XXX This can be improved for the case of `=`
-        Just (ia', q') ->
-          if snd ia >= snd ia'
-            then dqloop ia q'
-            else DQ.snoc ia q
-    extract (Tuple' _ q) = return $ snd $ fromMaybe (0, -1 / 0) $ DQ.head q
+
+  initial = return $ Partial $ Tuple3' (0 :: Int) (0 :: Int)
+                (mempty :: DQ.Deque (Int, a))
+
+  step (Tuple3' i w q) (a, ma) =
+    case ma of
+      Nothing ->
+        return $ Partial $ Tuple3' (i + 1) (w + 1)
+            (headCheck i q (w + 1) & dqloop (i, a))
+      Just old ->
+        return $ Partial $ Tuple3' (i + 1) w (headCheck i q w & dqloop (i,a))
+
+  {-# INLINE headCheck #-}
+  headCheck i q w =
+    case DQ.uncons q of
+      Nothing -> q
+      Just (ia', q') ->
+        if fst ia' <= i - w
+          then q'
+          else q
+
+  dqloop ia q =
+    case DQ.unsnoc q of
+      Nothing -> DQ.snoc ia q
+    -- XXX This can be improved for the case of `=`
+      Just (ia', q') ->
+        if snd ia >= snd ia'
+          then dqloop ia q'
+          else DQ.snoc ia q
+
+  extract (Tuple3' _ _ q) = return $ snd
+                            $ fromMaybe (0, error "max: Empty stream")
+                            $ DQ.head q
+
+-- | Range. The difference between the largest and smallest elements of a
+-- window.
+{-# INLINE range #-}
+range :: (Monad m, Num a, Ord a, Storable a) => Fold m (a, Maybe a) a
+range = Fold.teeWith (-) max min
 
 -- | The sum of all the elements in the sample. This uses Kahan-Babuska-Neumaier
 -- summation.
