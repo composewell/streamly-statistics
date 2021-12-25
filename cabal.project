@@ -2,7 +2,7 @@ packages: streamly-statistics.cabal
 
 source-repository-package
   type: git
-  location: git@github.com:composewell/streamly.git
+  location: https://github.com/composewell/streamly.git
+  tag: master
 
 jobs: 1
-
