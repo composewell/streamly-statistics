@@ -89,7 +89,7 @@ min = Fold step initial extract
           else DQ.snoc ia q
 
   extract (Tuple3' _ _ q) = return $ snd
-                            $ fromMaybe (0, error "min: Empty Stream")
+                            $ fromMaybe (0, error "min: Empty stream")
                             $ DQ.head q
 
 -- | The maximum element in the window.
