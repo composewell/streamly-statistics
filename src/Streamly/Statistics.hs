@@ -53,6 +53,8 @@ data WindowSize
 data Tuple5' a b c d e = Tuple5' !a !b !c !d !e deriving Show
 
 -- | The minimum element in the window.
+--
+-- /Time complexity/: @O(n^2)@ where @n@ is the window size.
 {-# INLINE min #-}
 min :: (Monad m, Num a, Ord a, Storable a) => Fold m (a, Maybe a) a
 min = Fold step initial extract
@@ -93,6 +95,8 @@ min = Fold step initial extract
                             $ DQ.head q
 
 -- | The maximum element in the window.
+--
+-- /Time complexity/: @O(n^2)@ where @n@ is the window size.
 {-# INLINE max #-}
 max :: (Monad m, Num a, Ord a, Storable a) => Fold m (a, Maybe a) a
 max = Fold step initial extract
