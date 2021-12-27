@@ -14,6 +14,11 @@ copyright: 2019 Composewell Technologies
 -- category:
 extra-source-files:  CHANGELOG.md
 
+flag use-gauge
+  description: Use gauge instead of tasty-bench for benchmarking
+  manual: True
+  default: False
+
 library
   exposed-modules:     Streamly.Statistics
   other-modules:       
@@ -43,7 +48,17 @@ benchmark benchmark
                     , streamly       == 0.8.1.1
                     , base           >= 4.9   && < 5
                     , random         >= 1.0.0 && < 2
-                    , gauge          >= 0.2.4 && < 0.3
+
+  if flag(use-gauge)
+    build-depends:  gauge >= 0.2.4 && < 0.3
+  else
+    build-depends:    tasty-bench >= 0.3 && < 0.4
+                    , tasty     >= 1.4.1 && < 1.5
+    mixins: tasty-bench
+      (Test.Tasty.Bench as Gauge
+      , Test.Tasty.Bench as Gauge.Main
+      )
+
   ghc-options: -O2
                -fspec-constr-recursive=16
                -fmax-worker-args=16
