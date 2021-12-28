@@ -18,11 +18,6 @@ benchWithFold :: Int -> String -> Fold IO Double Double -> Benchmark
 benchWithFold len name f =
   bench name $ nfIO $ randomRIO (1, 1) >>= S.fold f . source len
 
-{-# INLINE benchWithFoldInf #-}
-benchWithFoldInf :: Int -> String -> Fold IO (Double, Maybe Double) Double -> Benchmark
-benchWithFoldInf len name f =
-  bench name $ nfIO $ randomRIO (1, 1) >>= S.fold f . S.map (, Nothing) . source len
-
 {-# INLINE benchWithScan #-}
 benchWithScan :: Int -> String -> Fold IO Double Double -> Benchmark
 benchWithScan len name f =
@@ -33,20 +28,13 @@ benchWithPostscan :: Int -> String -> Fold IO Double Double -> Benchmark
 benchWithPostscan len name f =
   bench name $ nfIO $ randomRIO (1, 1) >>= S.drain . S.postscan f . source len
 
-{-# INLINE benchWithPostscanInf #-}
-benchWithPostscanInf :: Int -> String -> Fold IO (Double, Maybe Double) Double -> Benchmark
-benchWithPostscanInf len name f =
-  bench name $ nfIO $ randomRIO (1, 1) >>= S.drain . S.postscan f . S.map (, Nothing) . source len
-
 {-# INLINE numElements #-}
 numElements :: Int
 numElements = 100000
 
-windowSizeVal = 100
-
 {-# INLINE windowSize #-}
 windowSize :: Statistics.WindowSize
-windowSize = Statistics.Finite windowSizeVal
+windowSize = Statistics.Finite 100
 
 main :: IO ()
 main =
@@ -55,9 +43,18 @@ main =
         "finite"
         [ bgroup
             "fold"
-            [ benchWithFold numElements "min" (Ring.slidingWindow windowSizeVal Statistics.min)
-            , benchWithFold numElements "max" (Ring.slidingWindow windowSizeVal Statistics.max)
-            , benchWithFold numElements "range" (Ring.slidingWindow windowSizeVal Statistics.range)
+            [ benchWithFold numElements "min (window size 100)"
+                (Ring.slidingWindow 100 Statistics.min)
+            , benchWithFold numElements "min (window size 1000)"
+                (Ring.slidingWindow 1000 Statistics.min)
+            , benchWithFold numElements "max (window size 100)"
+                (Ring.slidingWindow 100 Statistics.max)
+            , benchWithFold numElements "max (window size 1000)"
+                (Ring.slidingWindow 1000 Statistics.max)
+            , benchWithFold numElements "range (window size 100)"
+                (Ring.slidingWindow 100 Statistics.range)
+            , benchWithFold numElements "range (window size 1000)"
+                (Ring.slidingWindow 1000 Statistics.range)
             , benchWithFold numElements "sum" (Statistics.sum windowSize)
             , benchWithFold numElements "mean" (Statistics.mean windowSize)
             , benchWithFold
@@ -67,9 +64,19 @@ main =
             ]
         , bgroup
             "scan"
-            [ benchWithPostscan numElements "min" (Ring.slidingWindow windowSizeVal Statistics.min)
-            , benchWithPostscan numElements "max" (Ring.slidingWindow windowSizeVal Statistics.max)
-            , benchWithPostscan numElements "range" (Ring.slidingWindow windowSizeVal Statistics.range)
+            [ benchWithPostscan numElements "min (window size 100)"
+                (Ring.slidingWindow 100 Statistics.min)
+            , benchWithPostscan numElements "min (window size 1000)"
+                (Ring.slidingWindow 1000 Statistics.min)
+            , benchWithPostscan numElements "max (window size 100)"
+                (Ring.slidingWindow 100 Statistics.max)
+            , benchWithPostscan numElements "max (window size 1000)"
+                (Ring.slidingWindow 1000 Statistics.max)
+            , benchWithPostscan numElements "range (window size 100)"
+                (Ring.slidingWindow 100 Statistics.range)
+            , benchWithPostscan numElements "range (window size 1000)"
+                (Ring.slidingWindow 1000 Statistics.range)
+            , benchWithScan numElements "sum" (Statistics.sum windowSize)
             , benchWithScan numElements "sum" (Statistics.sum windowSize)
             , benchWithScan numElements "mean" (Statistics.mean windowSize)
             , benchWithScan
@@ -82,11 +89,10 @@ main =
         "infinite"
         [ bgroup
             "fold"
-            [ benchWithFoldInf numElements "min" Statistics.min
-            , benchWithFoldInf numElements "max" Statistics.max
-            , benchWithFoldInf numElements "range" Statistics.range
-            , benchWithFold numElements "sum" (Statistics.sum Statistics.Infinite)
-            , benchWithFold numElements "mean" (Statistics.mean Statistics.Infinite)
+            [ benchWithFold numElements "sum"
+                (Statistics.sum Statistics.Infinite)
+            , benchWithFold numElements "mean"
+                (Statistics.mean Statistics.Infinite)
             , benchWithFold
                 numElements
                 "welfordMean"
@@ -94,11 +100,10 @@ main =
             ]
         , bgroup
             "scan"
-            [ benchWithPostscanInf numElements "min" Statistics.min
-            , benchWithPostscanInf numElements "max" Statistics.max
-            , benchWithPostscanInf numElements "range" Statistics.range
-            , benchWithScan numElements "sum" (Statistics.sum Statistics.Infinite)
-            , benchWithScan numElements "mean" (Statistics.mean Statistics.Infinite)
+            [ benchWithScan numElements "sum"
+                (Statistics.sum Statistics.Infinite)
+            , benchWithScan numElements "mean"
+                (Statistics.mean Statistics.Infinite)
             , benchWithScan
                 numElements
                 "welfordMean"
