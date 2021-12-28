@@ -31,6 +31,7 @@ import qualified Deque.Strict as DQ
 import Prelude hiding (sum, min, max)
 import qualified Prelude as P
 import Data.Maybe (fromMaybe)
+import Data.Bifunctor(bimap)
 
 -- XXX Make the following more numerically stable. Try to extend welfordMean method.
 -- XXX     - stdDev
@@ -145,106 +146,99 @@ range = Fold.teeWith (-) max min
 -- | The sum of all the elements in the sample. This uses Kahan-Babuska-Neumaier
 -- summation.
 {-# INLINE sum #-}
-sum :: MonadIO m => WindowSize -> Fold m Double Double
-sum Infinite = Fold step initial extract
+sum :: MonadIO m => Fold m (Double, Maybe Double) Double
+sum = Fold step initial extract
 
   where
 
-  initial = return $ Partial $ Tuple' (0 :: Double) (0 :: Double)
+  initial = return $ Partial (0 :: Double)
 
-  step (Tuple' s c) a =
-    let y = a - c
-        t = s + y
-        c' = (t - s) - y
-      in return $ Partial $ Tuple' t c'
+  step s (a, ma) = return $ Partial $
+        case ma of
+          Nothing -> s + a
+          Just old -> s + a - old
 
-  extract (Tuple' s _) = return s
+  extract = return
 
-sum (Finite w) = Fold step initial extract
+teeMean :: MonadIO m => Fold m (Double, Maybe Double) Double 
+  -> Fold m (Double, Maybe Double) Double 
+teeMean (Fold stepL initialL extractL) = Fold step initial extract
 
   where
 
-  initial =
-    fmap (\(a, b) -> Partial $ Tuple5' a b (0 :: Int) (0 :: Double) (0 :: Double)) $
-    liftIO $ Ring.new w
+  initial = do
+    r <- initialL
+    case r of
+      Partial s -> return $ Partial $ Tuple' s (0 :: Double)
+      Done b -> return $ Done b
+  
+  step (Tuple' st w) x@(a, ma) = do
+    r <- stepL st x
+    let 
+      w1 = case ma of
+        Nothing -> w + 1
+        Just _ -> w
+    case r of
+      Partial s -> return $ Partial $ Tuple' s w1
+      Done b -> return $ Done (b / w1)
 
-  step (Tuple5' rb rh i s c) a
-    | i < w = do
-      let y = a - c
-          t = s + y
-          c' = (t - s) - y
-      rh1 <- liftIO $ Ring.unsafeInsert rb rh (a + c')
-      return $ Partial $ Tuple5' rb rh1 (i + 1) t c'
-    | otherwise = do
-      a' <- liftIO $ peek rh
-      let s' = s - a'
-          y = a - c
-          t = s' + y
-          c' = (t - s') - y
-      rh1 <- liftIO $ Ring.unsafeInsert rb rh (a + c')
-      return $ Partial $ Tuple5' rb rh1 i t c'
-
-  extract (Tuple5' _ _ _ t _) = return t
+  extract (Tuple' s w) = do
+    r <- extractL s 
+    return $ r / w
 
 -- | Arithmetic mean. This uses Kahan-Babuska-Neumaier
 -- summation, so is more accurate than 'welfordMean' unless the input
 -- values are very large.
 {-# INLINE mean #-}
-mean :: MonadIO m => WindowSize -> Fold m Double Double
-mean ws@Infinite =
-  Fold.teeWith (/) (sum ws) (fmap fromIntegral Fold.length)
-mean ws@(Finite w) =
-  Fold.teeWith (/) (sum ws) (fmap (fromIntegral . P.min w) Fold.length)
+mean :: MonadIO m => Fold m (Double, Maybe Double) Double
+mean = teeMean sum
 
 {-# INLINE powerSum #-}
-powerSum :: MonadIO m => WindowSize -> Int -> Fold m Double Double
-powerSum ws i = Fold.lmap (^ i) $ sum ws
+powerSum :: MonadIO m => Int -> Fold m (Double, Maybe Double) Double
+powerSum i = Fold.lmap (\(a, ma) -> (a ^ i, (^i) <$> ma)) sum
 
 {-# INLINE powerSumAvg #-}
-powerSumAvg :: MonadIO m => WindowSize -> Int -> Fold m Double Double
-powerSumAvg ws@(Finite w) i =
-  Fold.teeWith (/) (powerSum ws i)
-  (fmap (fromIntegral . P.min w) Fold.length)
-powerSumAvg ws@Infinite i =
-  Fold.teeWith (/) (powerSum ws i)
+powerSumAvg :: MonadIO m => Int -> Fold m (Double, Maybe Double) Double
+-- powerSumAvg ws@(Finite w) i =
+--   Fold.teeWith (/) (powerSum ws i)
+--   (fmap (fromIntegral . P.min w) Fold.length)
+powerSumAvg i =
+  Fold.teeWith (/) (powerSum i)
   (fmap fromIntegral Fold.length)
 
 {-# INLINE variance #-}
-variance :: MonadIO m => WindowSize -> Fold m Double Double
-variance ws = Fold.teeWith (\p2 m -> p2 - m ^ 2) (powerSumAvg ws 2) (mean ws)
+variance :: MonadIO m => Fold m (Double, Maybe Double) Double
+variance = Fold.teeWith (\p2 m -> p2 - m ^ 2) (powerSumAvg 2) mean
 
 {-# INLINE stdDev #-}
-stdDev :: MonadIO m => WindowSize -> Fold m Double Double
-stdDev ws = sqrt <$> variance ws
+stdDev :: MonadIO m => Fold m (Double, Maybe Double) Double
+stdDev = sqrt <$> variance
 
 {-# INLINE stdErrMean #-}
-stdErrMean :: MonadIO m => WindowSize -> Int -> Fold m Double Double
-stdErrMean ws@(Finite w) i =
-  Fold.teeWith (\sd n -> sd / (sqrt . fromIntegral) n) (stdDev ws)
-  (fmap (\x -> fromIntegral (P.min w x)) Fold.length)
-stdErrMean ws@(Infinite) i =
-  Fold.teeWith (\sd n -> sd / (sqrt . fromIntegral) n) (stdDev ws)
-  (fmap (\x -> fromIntegral x) Fold.length)
+stdErrMean :: MonadIO m => Int -> Fold m (Double, Maybe Double) Double
+stdErrMean i =
+  Fold.teeWith (\sd n -> sd / (sqrt . fromIntegral) n) stdDev
+  (fmap fromIntegral Fold.length)
 
 {-# INLINE skewness #-}
-skewness :: MonadIO m => WindowSize -> Fold m Double Double
-skewness ws =
+skewness :: MonadIO m => Fold m (Double, Maybe Double) Double
+skewness =
   toFold $
   (\p3 sd m -> p3 / sd ^ 3 - 3 * (m / sd) - (m / sd) ^ 3)
-  <$> Tee (powerSumAvg ws 3)
-  <*> Tee (stdDev ws)
-  <*> Tee (mean ws)
+  <$> Tee (powerSumAvg 3)
+  <*> Tee stdDev
+  <*> Tee mean
 
 {-# INLINE kurtosis #-}
-kurtosis :: MonadIO m => WindowSize -> Fold m Double Double
-kurtosis ws =
+kurtosis :: MonadIO m => Fold m (Double, Maybe Double) Double
+kurtosis =
   toFold $
   (\p4 p3 sd m ->
      p4 / sd ^ 4 - 4 * ((m / sd) * (p3 / sd ^ 3)) - 3 * ((m / sd) ^ 4))
-  <$> Tee (powerSumAvg ws 4)
-  <*> Tee (powerSumAvg ws 3)
-  <*> Tee (stdDev ws)
-  <*> Tee (mean ws)
+  <$> Tee (powerSumAvg 4)
+  <*> Tee (powerSumAvg 3)
+  <*> Tee stdDev
+  <*> Tee mean
 
 -- | Arithmetic mean. This uses Welford's algorithm to provide
 -- numerical stability, using a single pass over the sample data.
@@ -252,41 +246,24 @@ kurtosis ws =
 -- Compared to 'mean', this loses a surprising amount of precision
 -- unless the inputs are very large.
 {-# INLINE welfordMean #-}
-welfordMean :: MonadIO m => WindowSize -> Fold m Double Double
-welfordMean Infinite = Fold step (return begin) (return . done)
+welfordMean :: MonadIO m => Fold m (Double, Maybe Double) Double
+welfordMean = Fold step initial extract
 
   where
 
-  begin = Partial $ Tuple' (0 :: Double) (0 :: Double)
+  initial = return $ Partial $ Tuple3' (0 :: Double) (0 :: Double) (0 :: Double)
 
-  step (Tuple' x n) y =
-    return $
+  step (Tuple3' x n w) (y, my) =
     let n' = n + 1
-      in Partial $ Tuple' (x + (y - x) / n') n'
-  done (Tuple' x _) = x
+        w' = w + 1
+    in
+      return $
+        case my of
+          Nothing -> Partial $ Tuple3' (x + (y - x) / n') n' w'
+          Just old -> Partial $ Tuple3' (x + (y - x) / w + (x - old) / w) n' w
 
-welfordMean (Finite w') = Fold step initial extract
-
-  where
-
-  w = fromIntegral w'
-
-  initial =
-    fmap (\(a, b) -> Fold.Partial $ Tuple5' a b (0 :: Int) (0 :: Double) (0 :: Double)) $
-    liftIO $ Ring.new w'
-
-  step (Tuple5' rb rh i x n) y
-    | i < w' = do
-      rh1 <- liftIO $ Ring.unsafeInsert rb rh y
-      let n' = n + 1
-      return $ Partial $ Tuple5' rb rh1 (i + 1) (x + (y - x) / n') n'
-    | otherwise = do
-      a' <- liftIO $ peek rh
-      rh1 <- liftIO $ Ring.unsafeInsert rb rh y
-      return $ Partial $ Tuple5' rb rh1 (i + 1) (x + (y - x) / w + (x - a') / w) n
-
-  extract (Tuple5' _ _ _ t _) = return t
+  extract (Tuple3' x _ _) = return x
 
 {-# INLINE geometricMean #-}
-geometricMean :: MonadIO m => WindowSize -> Fold m Double Double
-geometricMean ws = exp <$> Fold.lmap log (mean ws)
+geometricMean :: MonadIO m => Fold m (Double, Maybe Double) Double
+geometricMean = exp <$> Fold.lmap (bimap log (log <$>)) mean
