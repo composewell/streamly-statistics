@@ -18,10 +18,11 @@ main = hspec $ do
         deviationLimit = 1
         testFunc f = do
           let c = S.fromList testCase
-          a <- runIO $ S.fold (f (Finite winSize)) c
-          b <- runIO $ S.fold (f Infinite) $ S.drop (numElem - winSize) c
+          a <- runIO $ S.fold (Ring.slidingWindow winSize f) c
+          b <- runIO $ S.fold f $ S.drop (numElem - winSize) $ S.map (\a -> (a, Nothing)) $ c
           let c = a - b
           it ("should not deviate more than " ++ show deviationLimit) $ c >= -1 * deviationLimit && c <= deviationLimit
+
     describe "Sum" $ testFunc sum
     describe "mean" $ testFunc mean
     describe "welfordMean" $ testFunc welfordMean
@@ -34,15 +35,7 @@ main = hspec $ do
         testFunc tc f sI sW = do
           let c = S.fromList tc
               numElem = length tc
-          a <- runIO $ S.toList $ S.scan (f Infinite) c
-          b <- runIO $ S.toList $ S.scan (f (Finite winSize)) c
-          it "Infinite" $ tail a == sI
-          it ("Finite " ++ show winSize) $ tail b == sW
-
-        testFunc2 tc f sI sW = do
-          let c = S.fromList tc
-              numElem = length tc
-          a <- runIO $ S.toList $ S.postscan (Ring.slidingWindow numElem f) c
+          a <- runIO $ S.toList $ S.postscan f $ S.map (\a -> (a, Nothing)) $ c
           b <- runIO $ S.toList $ S.postscan (Ring.slidingWindow winSize f) c
           it "Infinite" $ a  == sI
           it ("Finite " ++ show winSize) $ b == sW
@@ -50,15 +43,15 @@ main = hspec $ do
     describe "min" $ do
       let scanInf = [31, 31, 31, 26, 26, 26, 26]
           scanWin = [31, 31, 31, 26, 26, 26, 53]
-      testFunc2 testCase1 min scanInf scanWin
+      testFunc testCase1 min scanInf scanWin
     describe "max" $ do
       let scanInf = [31, 41, 59, 59, 59, 59, 97]
           scanWin = [31, 41, 59, 59, 59, 58, 97]
-      testFunc2 testCase1 max scanInf scanWin
+      testFunc testCase1 max scanInf scanWin
     describe "range" $ do
       let scanInf = [0, 10, 28, 33, 33, 33, 71]
           scanWin = [0, 10, 28, 33, 33, 32, 44]
-      testFunc2 testCase1 range scanInf scanWin
+      testFunc testCase1 range scanInf scanWin
     describe "sum" $ do
       let scanInf = [1, 2, 3, 4, 5, 12]
           scanWin = [1, 2, 3, 3, 3, 9]
