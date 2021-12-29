@@ -40,74 +40,67 @@ main :: IO ()
 main =
   defaultMain
     [ bgroup
-        "finite"
-        [ bgroup
-            "fold"
-            [ benchWithFold numElements "min (window size 100)"
-                (Ring.slidingWindow 100 Statistics.min)
-            , benchWithFold numElements "min (window size 1000)"
-                (Ring.slidingWindow 1000 Statistics.min)
-            , benchWithFold numElements "max (window size 100)"
-                (Ring.slidingWindow 100 Statistics.max)
-            , benchWithFold numElements "max (window size 1000)"
-                (Ring.slidingWindow 1000 Statistics.max)
-            , benchWithFold numElements "range (window size 100)"
-                (Ring.slidingWindow 100 Statistics.range)
-            , benchWithFold numElements "range (window size 1000)"
-                (Ring.slidingWindow 1000 Statistics.range)
-            , benchWithFold numElements "sum" (Statistics.sum windowSize)
-            , benchWithFold numElements "mean" (Statistics.mean windowSize)
-            , benchWithFold
-                numElements
-                "welfordMean"
-                (Statistics.welfordMean windowSize)
-            ]
-        , bgroup
-            "scan"
-            [ benchWithPostscan numElements "min (window size 100)"
-                (Ring.slidingWindow 100 Statistics.min)
-            , benchWithPostscan numElements "min (window size 1000)"
-                (Ring.slidingWindow 1000 Statistics.min)
-            , benchWithPostscan numElements "max (window size 100)"
-                (Ring.slidingWindow 100 Statistics.max)
-            , benchWithPostscan numElements "max (window size 1000)"
-                (Ring.slidingWindow 1000 Statistics.max)
-            , benchWithPostscan numElements "range (window size 100)"
-                (Ring.slidingWindow 100 Statistics.range)
-            , benchWithPostscan numElements "range (window size 1000)"
-                (Ring.slidingWindow 1000 Statistics.range)
-            , benchWithScan numElements "sum" (Statistics.sum windowSize)
-            , benchWithScan numElements "sum" (Statistics.sum windowSize)
-            , benchWithScan numElements "mean" (Statistics.mean windowSize)
-            , benchWithScan
-                numElements
-                "welfordMean"
-                (Statistics.welfordMean windowSize)
-            ]
+        "fold"
+        [ benchWithFold numElements "min (window size 100)"
+            (Ring.slidingWindow 100 Statistics.min)
+        , benchWithFold numElements "min (window size 1000)"
+            (Ring.slidingWindow 1000 Statistics.min)
+        , benchWithFold numElements "max (window size 100)"
+            (Ring.slidingWindow 100 Statistics.max)
+        , benchWithFold numElements "max (window size 1000)"
+            (Ring.slidingWindow 1000 Statistics.max)
+        , benchWithFold numElements "range (window size 100)"
+            (Ring.slidingWindow 100 Statistics.range)
+        , benchWithFold numElements "range (window size 1000)"
+            (Ring.slidingWindow 1000 Statistics.range)
+        , benchWithFold numElements "sum (window size 100)"
+            (Ring.slidingWindow 100 Statistics.sum)
+        , benchWithFold numElements "sum (window size 1000"
+            (Ring.slidingWindow 1000 Statistics.sum)
+        , benchWithFold numElements "mean (window size 100)"
+            (Ring.slidingWindow 100 Statistics.mean)
+        , benchWithFold numElements "mean (window size 1000)"
+            (Ring.slidingWindow 1000 Statistics.mean)
+        , benchWithFold
+            numElements
+            "welfordMean (window size 100)"
+            (Ring.slidingWindow 100 Statistics.welfordMean)
+        , benchWithFold
+            numElements
+            "welfordMean (window size 1000)"
+            (Ring.slidingWindow 1000 Statistics.welfordMean)
+
         ]
     , bgroup
-        "infinite"
-        [ bgroup
-            "fold"
-            [ benchWithFold numElements "sum"
-                (Statistics.sum Statistics.Infinite)
-            , benchWithFold numElements "mean"
-                (Statistics.mean Statistics.Infinite)
-            , benchWithFold
-                numElements
-                "welfordMean"
-                (Statistics.welfordMean Statistics.Infinite)
-            ]
-        , bgroup
-            "scan"
-            [ benchWithScan numElements "sum"
-                (Statistics.sum Statistics.Infinite)
-            , benchWithScan numElements "mean"
-                (Statistics.mean Statistics.Infinite)
-            , benchWithScan
-                numElements
-                "welfordMean"
-                (Statistics.welfordMean Statistics.Infinite)
-            ]
+        "scan"
+        [ benchWithPostscan numElements "min (window size 100)"
+            (Ring.slidingWindow 100 Statistics.min)
+        , benchWithPostscan numElements "min (window size 1000)"
+            (Ring.slidingWindow 1000 Statistics.min)
+        , benchWithPostscan numElements "max (window size 100)"
+            (Ring.slidingWindow 100 Statistics.max)
+        , benchWithPostscan numElements "max (window size 1000)"
+            (Ring.slidingWindow 1000 Statistics.max)
+        , benchWithPostscan numElements "range (window size 100)"
+            (Ring.slidingWindow 100 Statistics.range)
+        , benchWithPostscan numElements "range (window size 1000)"
+            (Ring.slidingWindow 1000 Statistics.range)
+        , benchWithPostscan numElements "sum (window size 100)"
+            (Ring.slidingWindow 100 Statistics.sum)
+        , benchWithPostscan numElements "sum (window size 1000)"
+            (Ring.slidingWindow 1000 Statistics.sum)
+        , benchWithPostscan numElements "mean (window size 100)"
+            (Ring.slidingWindow 100 Statistics.mean)
+        , benchWithPostscan numElements "mean (window size 1000)"
+            (Ring.slidingWindow 1000 Statistics.mean)
+        , benchWithPostscan
+            numElements
+            "welfordMean (window size 100)"
+            (Ring.slidingWindow 100 Statistics.welfordMean)
+        , benchWithPostscan
+            numElements
+            "welfordMean (window size 1000)"
+            (Ring.slidingWindow 1000 Statistics.welfordMean)
+
         ]
     ]
