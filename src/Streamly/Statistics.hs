@@ -143,11 +143,10 @@ max = Fold step initial extract
 range :: (Monad m, Num a, Ord a, Storable a) => Fold m (a, Maybe a) a
 range = Fold.teeWith (-) max min
 
--- | The sum of all the elements in the sample. This uses Kahan-Babuska-Neumaier
--- summation.
-{-# INLINE sum #-}
-sum :: MonadIO m => Fold m (Double, Maybe Double) Double
-sum = Fold step initial extract
+-- | The sum of all the elements in the sample.
+{-# INLINE sumInt #-}
+sumInt :: MonadIO m => Fold m (Double, Maybe Double) Double
+sumInt = Fold step initial extract
 
   where
 
@@ -160,7 +159,30 @@ sum = Fold step initial extract
 
   extract = return
 
+
+-- | The sum of all the elements in the sample. This uses Kahan-Babuska-Neumaier
+-- summation.
+{-# INLINE sum #-}
+sum :: MonadIO m => Fold m (Double, Maybe Double) Double
+sum = Fold step initial extract
+
+  where
+
+  initial = return $ Partial $ Tuple' (0 :: Double) (0 :: Double)
+
+  step (Tuple' s c) (a, ma) = 
+    let y = 
+          case ma of
+            Nothing -> a - c
+            Just old -> a - old - c
+        t = s + y
+        c1 = (t - s) - y
+    in return $ Partial $ Tuple' t c1
+    
+  extract (Tuple' s _) = return s
+
 -- | Window Size. It computes the size of the sliding window.
+{-# INLINE windowSize #-}
 windowSize :: MonadIO m => Fold m (Double, Maybe Double) Double 
 windowSize = Fold.foldl' step initial
 
