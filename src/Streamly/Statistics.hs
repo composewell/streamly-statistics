@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 module Streamly.Statistics
   (
   -- * Types
@@ -145,12 +146,12 @@ range = Fold.teeWith (-) max min
 
 -- | The sum of all the elements in the sample.
 {-# INLINE sumInt #-}
-sumInt :: MonadIO m => Fold m (Double, Maybe Double) Double
+sumInt :: forall m a. (MonadIO m, Num a) => Fold m (a, Maybe a) a 
 sumInt = Fold step initial extract
 
   where
 
-  initial = return $ Partial (0 :: Double)
+  initial = return $ Partial (0 :: a)
 
   step s (a, ma) = return $ Partial $
         case ma of
@@ -183,14 +184,14 @@ sum = Fold step initial extract
 
 -- | Window Size. It computes the size of the sliding window.
 {-# INLINE windowSize #-}
-windowSize :: MonadIO m => Fold m (Double, Maybe Double) Double 
+windowSize :: MonadIO m => Fold m (a, Maybe a) Int
 windowSize = Fold.foldl' step initial
 
   where
 
-  initial = 0 :: Double
+  initial = 0 :: Int
   
-  step w x@(a, ma) = 
+  step w (_, ma) = 
     case ma of
       Nothing -> w + 1
       _ -> w
@@ -200,7 +201,7 @@ windowSize = Fold.foldl' step initial
 -- values are very large.
 {-# INLINE mean #-}
 mean :: MonadIO m => Fold m (Double, Maybe Double) Double
-mean = Fold.teeWith (/) sum windowSize
+mean = Fold.teeWith (/) sum (fromIntegral <$> windowSize)
 
 {-# INLINE powerSum #-}
 powerSum :: MonadIO m => Int -> Fold m (Double, Maybe Double) Double
