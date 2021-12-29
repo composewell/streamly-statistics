@@ -160,38 +160,25 @@ sum = Fold step initial extract
 
   extract = return
 
-teeMean :: MonadIO m => Fold m (Double, Maybe Double) Double 
-  -> Fold m (Double, Maybe Double) Double 
-teeMean (Fold stepL initialL extractL) = Fold step initial extract
+-- | Window Size. It computes the size of the sliding window.
+windowSize :: MonadIO m => Fold m (Double, Maybe Double) Double 
+windowSize = Fold.foldl' step initial
 
   where
 
-  initial = do
-    r <- initialL
-    case r of
-      Partial s -> return $ Partial $ Tuple' s (0 :: Double)
-      Done b -> return $ Done b
+  initial = 0 :: Double
   
-  step (Tuple' st w) x@(a, ma) = do
-    r <- stepL st x
-    let 
-      w1 = case ma of
-        Nothing -> w + 1
-        Just _ -> w
-    case r of
-      Partial s -> return $ Partial $ Tuple' s w1
-      Done b -> return $ Done (b / w1)
-
-  extract (Tuple' s w) = do
-    r <- extractL s 
-    return $ r / w
+  step w x@(a, ma) = 
+    case ma of
+      Nothing -> w + 1
+      _ -> w
 
 -- | Arithmetic mean. This uses Kahan-Babuska-Neumaier
 -- summation, so is more accurate than 'welfordMean' unless the input
 -- values are very large.
 {-# INLINE mean #-}
 mean :: MonadIO m => Fold m (Double, Maybe Double) Double
-mean = teeMean sum
+mean = Fold.teeWith (/) sum windowSize
 
 {-# INLINE powerSum #-}
 powerSum :: MonadIO m => Int -> Fold m (Double, Maybe Double) Double
