@@ -41,27 +41,27 @@ main = hspec $ do
           it ("Finite " ++ show winSize) $ b == sW
 
     describe "min" $ do
-      let scanInf = [31, 31, 31, 26, 26, 26, 26]
-          scanWin = [31, 31, 31, 26, 26, 26, 53]
+      let scanInf = [31, 31, 31, 26, 26, 26, 26] :: [Double]
+          scanWin = [31, 31, 31, 26, 26, 26, 53] :: [Double]
       testFunc testCase1 min scanInf scanWin
     describe "max" $ do
-      let scanInf = [31, 41, 59, 59, 59, 59, 97]
-          scanWin = [31, 41, 59, 59, 59, 58, 97]
+      let scanInf = [31, 41, 59, 59, 59, 59, 97] :: [Double]
+          scanWin = [31, 41, 59, 59, 59, 58, 97] :: [Double]
       testFunc testCase1 max scanInf scanWin
     describe "range" $ do
-      let scanInf = [0, 10, 28, 33, 33, 33, 71]
-          scanWin = [0, 10, 28, 33, 33, 32, 44]
+      let scanInf = [0, 10, 28, 33, 33, 33, 71] :: [Double]
+          scanWin = [0, 10, 28, 33, 33, 32, 44] :: [Double]
       testFunc testCase1 range scanInf scanWin
     describe "sum" $ do
-      let scanInf = [1, 2, 3, 4, 5, 12]
-          scanWin = [1, 2, 3, 3, 3, 9]
+      let scanInf = [1, 2, 3, 4, 5, 12] :: [Double]
+          scanWin = [1, 2, 3, 3, 3, 9] :: [Double]
       testFunc testCase2 sum scanInf scanWin
     describe "mean" $ do
-      let scanInf = [1, 1, 1, 1, 1, 2]
-          scanWin = [1, 1, 1, 1, 1, 3]
+      let scanInf = [1, 1, 1, 1, 1, 2] :: [Double]
+          scanWin = [1, 1, 1, 1, 1, 3] :: [Double]
       runIO $ print scanInf
       testFunc testCase2 mean scanInf scanWin
     describe "welfordMean" $ do
-      let scanInf = [1, 1, 1, 1, 1, 2]
-          scanWin = [1, 1, 1, 1, 1, 3]
+      let scanInf = [1, 1, 1, 1, 1, 2] :: [Double]
+          scanWin = [1, 1, 1, 1, 1, 3] :: [Double]
       testFunc testCase2 welfordMean scanInf scanWin

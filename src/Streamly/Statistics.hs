@@ -164,12 +164,12 @@ sumInt = Fold step initial extract
 -- | The sum of all the elements in the sample. This uses Kahan-Babuska-Neumaier
 -- summation.
 {-# INLINE sum #-}
-sum :: MonadIO m => Fold m (Double, Maybe Double) Double
+sum :: forall m a. (MonadIO m, Num a) => Fold m (a, Maybe a) a 
 sum = Fold step initial extract
 
   where
 
-  initial = return $ Partial $ Tuple' (0 :: Double) (0 :: Double)
+  initial = return $ Partial $ Tuple' (0 :: a) (0 :: a)
 
   step (Tuple' s c) (a, ma) = 
     let y = 
@@ -200,38 +200,35 @@ windowSize = Fold.foldl' step initial
 -- summation, so is more accurate than 'welfordMean' unless the input
 -- values are very large.
 {-# INLINE mean #-}
-mean :: MonadIO m => Fold m (Double, Maybe Double) Double
+mean :: forall m a. (MonadIO m, Fractional a) => Fold m (a, Maybe a) a 
 mean = Fold.teeWith (/) sum (fromIntegral <$> windowSize)
 
 {-# INLINE powerSum #-}
-powerSum :: MonadIO m => Int -> Fold m (Double, Maybe Double) Double
+powerSum :: forall m a. (MonadIO m, Num a) => Int -> Fold m (a, Maybe a) a
 powerSum i = Fold.lmap (\(a, ma) -> (a ^ i, (^i) <$> ma)) sum
 
 {-# INLINE powerSumAvg #-}
-powerSumAvg :: MonadIO m => Int -> Fold m (Double, Maybe Double) Double
--- powerSumAvg ws@(Finite w) i =
---   Fold.teeWith (/) (powerSum ws i)
---   (fmap (fromIntegral . P.min w) Fold.length)
+powerSumAvg :: forall m a. (MonadIO m, Fractional a) => Int -> Fold m (a, Maybe a) a
 powerSumAvg i =
   Fold.teeWith (/) (powerSum i)
-  (fmap fromIntegral Fold.length)
+  (fmap fromIntegral (Fold.teeWith P.min windowSize Fold.length))
 
 {-# INLINE variance #-}
-variance :: MonadIO m => Fold m (Double, Maybe Double) Double
+variance :: forall m a. (MonadIO m, Fractional a) => Fold m (a, Maybe a) a
 variance = Fold.teeWith (\p2 m -> p2 - m ^ 2) (powerSumAvg 2) mean
 
 {-# INLINE stdDev #-}
-stdDev :: MonadIO m => Fold m (Double, Maybe Double) Double
+stdDev :: forall m a. (MonadIO m, Floating a) => Fold m (a, Maybe a) a
 stdDev = sqrt <$> variance
 
 {-# INLINE stdErrMean #-}
-stdErrMean :: MonadIO m => Int -> Fold m (Double, Maybe Double) Double
+stdErrMean :: forall m a. (MonadIO m, Floating a) => Int -> Fold m (a, Maybe a) a
 stdErrMean i =
   Fold.teeWith (\sd n -> sd / (sqrt . fromIntegral) n) stdDev
-  (fmap fromIntegral Fold.length)
+  (fmap fromIntegral windowSize)
 
 {-# INLINE skewness #-}
-skewness :: MonadIO m => Fold m (Double, Maybe Double) Double
+skewness :: forall m a. (MonadIO m, Floating a) => Fold m (a, Maybe a) a
 skewness =
   toFold $
   (\p3 sd m -> p3 / sd ^ 3 - 3 * (m / sd) - (m / sd) ^ 3)
@@ -240,7 +237,7 @@ skewness =
   <*> Tee mean
 
 {-# INLINE kurtosis #-}
-kurtosis :: MonadIO m => Fold m (Double, Maybe Double) Double
+kurtosis :: forall m a. (MonadIO m, Floating a) => Fold m (a, Maybe a) a 
 kurtosis =
   toFold $
   (\p4 p3 sd m ->
@@ -256,24 +253,23 @@ kurtosis =
 -- Compared to 'mean', this loses a surprising amount of precision
 -- unless the inputs are very large.
 {-# INLINE welfordMean #-}
-welfordMean :: MonadIO m => Fold m (Double, Maybe Double) Double
+welfordMean :: forall m a. (MonadIO m, Floating a) => Fold m (a, Maybe a) a 
 welfordMean = Fold step initial extract
 
   where
 
-  initial = return $ Partial $ Tuple3' (0 :: Double) (0 :: Double) (0 :: Double)
+  initial = return $ Partial $ Tuple' (0 :: a) (0 :: Int)
 
-  step (Tuple3' x n w) (y, my) =
-    let n' = n + 1
-        w' = w + 1
-    in
+  step (Tuple' x w) (y, my) =
       return $
         case my of
-          Nothing -> Partial $ Tuple3' (x + (y - x) / n') n' w'
-          Just old -> Partial $ Tuple3' (x + (y - x) / w + (x - old) / w) n' w
+          Nothing -> Partial $ Tuple' (x + (y - x) / w') (w + 1)
+                      where w' = fromIntegral (w + 1)
+          Just old -> Partial $ Tuple' (x + (y - x) / w' + (x - old) / w') w
+                      where w' = fromIntegral w
 
-  extract (Tuple3' x _ _) = return x
+  extract (Tuple' x _) = return x
 
 {-# INLINE geometricMean #-}
-geometricMean :: MonadIO m => Fold m (Double, Maybe Double) Double
+geometricMean :: forall m a. (MonadIO m, Floating a) => Fold m (a, Maybe a) a 
 geometricMean = exp <$> Fold.lmap (bimap log (log <$>)) mean
