@@ -146,7 +146,7 @@ range = Fold.teeWith (-) max min
 
 -- | The sum of all the elements in the sample.
 {-# INLINE sumInt #-}
-sumInt :: forall m a. (MonadIO m, Num a) => Fold m (a, Maybe a) a 
+sumInt :: forall m a. (MonadIO m, Num a) => Fold m (a, Maybe a) a
 sumInt = Fold step initial extract
 
   where
@@ -164,22 +164,22 @@ sumInt = Fold step initial extract
 -- | The sum of all the elements in the sample. This uses Kahan-Babuska-Neumaier
 -- summation.
 {-# INLINE sum #-}
-sum :: forall m a. (MonadIO m, Num a) => Fold m (a, Maybe a) a 
+sum :: forall m a. (MonadIO m, Num a) => Fold m (a, Maybe a) a
 sum = Fold step initial extract
 
   where
 
   initial = return $ Partial $ Tuple' (0 :: a) (0 :: a)
 
-  step (Tuple' s c) (a, ma) = 
-    let y = 
+  step (Tuple' s c) (a, ma) =
+    let y =
           case ma of
             Nothing -> a - c
             Just old -> a - old - c
         t = s + y
         c1 = (t - s) - y
     in return $ Partial $ Tuple' t c1
-    
+
   extract (Tuple' s _) = return s
 
 -- | Window Size. It computes the size of the sliding window.
@@ -190,8 +190,8 @@ windowSize = Fold.foldl' step initial
   where
 
   initial = 0 :: Int
-  
-  step w (_, ma) = 
+
+  step w (_, ma) =
     case ma of
       Nothing -> w + 1
       _ -> w
@@ -200,7 +200,7 @@ windowSize = Fold.foldl' step initial
 -- summation, so is more accurate than 'welfordMean' unless the input
 -- values are very large.
 {-# INLINE mean #-}
-mean :: forall m a. (MonadIO m, Fractional a) => Fold m (a, Maybe a) a 
+mean :: forall m a. (MonadIO m, Fractional a) => Fold m (a, Maybe a) a
 mean = Fold.teeWith (/) sum (fromIntegral <$> windowSize)
 
 {-# INLINE powerSum #-}
@@ -209,9 +209,7 @@ powerSum i = Fold.lmap (\(a, ma) -> (a ^ i, (^i) <$> ma)) sum
 
 {-# INLINE powerSumAvg #-}
 powerSumAvg :: forall m a. (MonadIO m, Fractional a) => Int -> Fold m (a, Maybe a) a
-powerSumAvg i =
-  Fold.teeWith (/) (powerSum i)
-  (fmap fromIntegral (Fold.teeWith P.min windowSize Fold.length))
+powerSumAvg i = Fold.teeWith (/) (powerSum i) (fmap fromIntegral windowSize)
 
 {-# INLINE variance #-}
 variance :: forall m a. (MonadIO m, Fractional a) => Fold m (a, Maybe a) a
@@ -224,8 +222,10 @@ stdDev = sqrt <$> variance
 {-# INLINE stdErrMean #-}
 stdErrMean :: forall m a. (MonadIO m, Floating a) => Int -> Fold m (a, Maybe a) a
 stdErrMean i =
-  Fold.teeWith (\sd n -> sd / (sqrt . fromIntegral) n) stdDev
-  (fmap fromIntegral windowSize)
+  Fold.teeWith
+    (\sd n -> sd / (sqrt . fromIntegral) n)
+    stdDev
+    (fmap fromIntegral windowSize)
 
 {-# INLINE skewness #-}
 skewness :: forall m a. (MonadIO m, Floating a) => Fold m (a, Maybe a) a
@@ -237,7 +237,7 @@ skewness =
   <*> Tee mean
 
 {-# INLINE kurtosis #-}
-kurtosis :: forall m a. (MonadIO m, Floating a) => Fold m (a, Maybe a) a 
+kurtosis :: forall m a. (MonadIO m, Floating a) => Fold m (a, Maybe a) a
 kurtosis =
   toFold $
   (\p4 p3 sd m ->
@@ -253,7 +253,7 @@ kurtosis =
 -- Compared to 'mean', this loses a surprising amount of precision
 -- unless the inputs are very large.
 {-# INLINE welfordMean #-}
-welfordMean :: forall m a. (MonadIO m, Floating a) => Fold m (a, Maybe a) a 
+welfordMean :: forall m a. (MonadIO m, Floating a) => Fold m (a, Maybe a) a
 welfordMean = Fold step initial extract
 
   where
@@ -271,5 +271,5 @@ welfordMean = Fold step initial extract
   extract (Tuple' x _) = return x
 
 {-# INLINE geometricMean #-}
-geometricMean :: forall m a. (MonadIO m, Floating a) => Fold m (a, Maybe a) a 
+geometricMean :: forall m a. (MonadIO m, Floating a) => Fold m (a, Maybe a) a
 geometricMean = exp <$> Fold.lmap (bimap log (log <$>)) mean
