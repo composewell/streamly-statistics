@@ -1,47 +1,49 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Streamly.Statistics
-  (
-  -- * Types
+    (
+    -- * Types
     WindowSize(..)
 
-  -- * Descriptive functions
-  , min
-  , max
-  , range
+    -- * Descriptive functions
+    , min
+    , max
+    , range
 
-  -- * Statistics of a location
-  , sum
-  , mean
-  , welfordMean
-  ) where
+    -- * Statistics of a location
+    , sum
+    , mean
+    , welfordMean
+    )
+where
 
+import Control.Monad.IO.Class (MonadIO(..))
+import Data.Bifunctor(bimap)
+import Data.Function ((&))
+import Data.Maybe (fromMaybe)
+import Foreign.Storable (Storable(..))
+import Streamly.Data.Fold.Tee(Tee(..), toFold)
 import Streamly.Internal.Data.Fold.Type (Fold(..), Step(..))
 import Streamly.Internal.Data.Tuple.Strict
-import Streamly.Data.Fold.Tee(Tee(..), toFold)
-import Control.Monad.IO.Class (MonadIO(..))
-import Foreign.Storable (Storable(..))
-
-import qualified Streamly.Prelude as Stream
-import qualified Streamly.Internal.Data.Ring.Foreign as Ring
-import qualified Streamly.Data.Fold as Fold
-import qualified Streamly.Internal.Data.Fold as Fold
-import Data.Function ((&))
 
 import qualified Deque.Strict as DQ
+import qualified Streamly.Data.Fold as Fold
+import qualified Streamly.Internal.Data.Fold as Fold
+import qualified Streamly.Internal.Data.Ring.Foreign as Ring
+import qualified Streamly.Prelude as Stream
 
 import Prelude hiding (sum, min, max)
 import qualified Prelude as P
-import Data.Maybe (fromMaybe)
-import Data.Bifunctor(bimap)
 
--- XXX Make the following more numerically stable. Try to extend welfordMean method.
+-- XXX Make the following more numerically stable. Try to extend welfordMean
+-- XXX method.
 -- XXX     - stdDev
 -- XXX     - skewness
 -- XXX     - kurtosis
--- XXX Refrences:
+-- XXX References:
 -- XXX     * https://www.johndcook.com/blog/standard_deviation/
 -- XXX     * https://www.johndcook.com/blog/skewness_kurtosis/
--- XXX     * Art of Computer Programming, Volume 2: Seminumerical Algorithms (3rd Edition), Page 232
+-- XXX     * Art of Computer Programming, Volume 2: Seminumerical Algorithms
+-- XXX       (3rd Edition), Page 232
 
 
 -- | The window size for the statistics to take place in.
@@ -49,8 +51,8 @@ import Data.Bifunctor(bimap)
 -- the last i elements seen in the stream else the sample is the
 -- entire stream.
 data WindowSize
-  = Finite Int
-  | Infinite
+    = Finite Int
+    | Infinite
 
 data Tuple5' a b c d e = Tuple5' !a !b !c !d !e deriving Show
 
@@ -61,40 +63,41 @@ data Tuple5' a b c d e = Tuple5' !a !b !c !d !e deriving Show
 min :: (Monad m, Num a, Ord a, Storable a) => Fold m (a, Maybe a) a
 min = Fold step initial extract
 
-  where
+    where
 
-  initial = return $ Partial $ Tuple3' (0 :: Int) (0 :: Int)
+    initial = return $ Partial $ Tuple3' (0 :: Int) (0 :: Int)
                 (mempty :: DQ.Deque (Int, a))
 
-  step (Tuple3' i w q) (a, ma) =
-    case ma of
-      Nothing ->
-        return $ Partial $ Tuple3' (i + 1) (w + 1)
-            (headCheck i q (w + 1) & dqloop (i, a))
-      Just old ->
-        return $ Partial $ Tuple3' (i + 1) w (headCheck i q w & dqloop (i,a))
+    step (Tuple3' i w q) (a, ma) =
+        case ma of
+            Nothing ->
+                return $ Partial $ Tuple3' (i + 1) (w + 1)
+                    (headCheck i q (w + 1) & dqloop (i, a))
+            Just old ->
+                return $ Partial $ Tuple3' (i + 1) w
+                    (headCheck i q w & dqloop (i,a))
 
-  {-# INLINE headCheck #-}
-  headCheck i q w =
-    case DQ.uncons q of
-      Nothing -> q
-      Just (ia', q') ->
-        if fst ia' <= i - w
-          then q'
-          else q
+    {-# INLINE headCheck #-}
+    headCheck i q w =
+        case DQ.uncons q of
+            Nothing -> q
+            Just (ia', q') ->
+                if fst ia' <= i - w
+                then q'
+                else q
 
-  dqloop ia q =
-    case DQ.unsnoc q of
-      Nothing -> DQ.snoc ia q
-    -- XXX This can be improved for the case of `=`
-      Just (ia', q') ->
-        if snd ia <= snd ia'
-          then dqloop ia q'
-          else DQ.snoc ia q
+    dqloop ia q =
+        case DQ.unsnoc q of
+            Nothing -> DQ.snoc ia q
+            -- XXX This can be improved for the case of `=`
+            Just (ia', q') ->
+                if snd ia <= snd ia'
+                then dqloop ia q'
+                else DQ.snoc ia q
 
-  extract (Tuple3' _ _ q) = return $ snd
-                            $ fromMaybe (0, error "min: Empty stream")
-                            $ DQ.head q
+    extract (Tuple3' _ _ q) = return $ snd
+                                $ fromMaybe (0, error "min: Empty stream")
+                                $ DQ.head q
 
 -- | The maximum element in the window.
 --
@@ -103,40 +106,41 @@ min = Fold step initial extract
 max :: (Monad m, Num a, Ord a, Storable a) => Fold m (a, Maybe a) a
 max = Fold step initial extract
 
-  where
+    where
 
-  initial = return $ Partial $ Tuple3' (0 :: Int) (0 :: Int)
+    initial = return $ Partial $ Tuple3' (0 :: Int) (0 :: Int)
                 (mempty :: DQ.Deque (Int, a))
 
-  step (Tuple3' i w q) (a, ma) =
-    case ma of
-      Nothing ->
-        return $ Partial $ Tuple3' (i + 1) (w + 1)
-            (headCheck i q (w + 1) & dqloop (i, a))
-      Just old ->
-        return $ Partial $ Tuple3' (i + 1) w (headCheck i q w & dqloop (i,a))
+    step (Tuple3' i w q) (a, ma) =
+        case ma of
+            Nothing ->
+                return $ Partial $ Tuple3' (i + 1) (w + 1)
+                    (headCheck i q (w + 1) & dqloop (i, a))
+            Just old ->
+                return $ Partial $ Tuple3' (i + 1) w
+                    (headCheck i q w & dqloop (i,a))
 
-  {-# INLINE headCheck #-}
-  headCheck i q w =
-    case DQ.uncons q of
-      Nothing -> q
-      Just (ia', q') ->
-        if fst ia' <= i - w
-          then q'
-          else q
+    {-# INLINE headCheck #-}
+    headCheck i q w =
+        case DQ.uncons q of
+            Nothing -> q
+            Just (ia', q') ->
+                if fst ia' <= i - w
+                then q'
+                else q
 
-  dqloop ia q =
-    case DQ.unsnoc q of
-      Nothing -> DQ.snoc ia q
-    -- XXX This can be improved for the case of `=`
-      Just (ia', q') ->
-        if snd ia >= snd ia'
-          then dqloop ia q'
-          else DQ.snoc ia q
+    dqloop ia q =
+        case DQ.unsnoc q of
+        Nothing -> DQ.snoc ia q
+        -- XXX This can be improved for the case of `=`
+        Just (ia', q') ->
+            if snd ia >= snd ia'
+            then dqloop ia q'
+            else DQ.snoc ia q
 
-  extract (Tuple3' _ _ q) = return $ snd
-                            $ fromMaybe (0, error "max: Empty stream")
-                            $ DQ.head q
+    extract (Tuple3' _ _ q) = return $ snd
+                                $ fromMaybe (0, error "max: Empty stream")
+                                $ DQ.head q
 
 -- | Range. The difference between the largest and smallest elements of a
 -- window.
@@ -149,17 +153,16 @@ range = Fold.teeWith (-) max min
 sumInt :: forall m a. (MonadIO m, Num a) => Fold m (a, Maybe a) a
 sumInt = Fold step initial extract
 
-  where
+    where
 
-  initial = return $ Partial (0 :: a)
+    initial = return $ Partial (0 :: a)
 
-  step s (a, ma) = return $ Partial $
+    step s (a, ma) = return $ Partial $
         case ma of
-          Nothing -> s + a
-          Just old -> s + a - old
+            Nothing -> s + a
+            Just old -> s + a - old
 
-  extract = return
-
+    extract = return
 
 -- | The sum of all the elements in the sample. This uses Kahan-Babuska-Neumaier
 -- summation.
@@ -167,34 +170,34 @@ sumInt = Fold step initial extract
 sum :: forall m a. (MonadIO m, Num a) => Fold m (a, Maybe a) a
 sum = Fold step initial extract
 
-  where
+    where
 
-  initial = return $ Partial $ Tuple' (0 :: a) (0 :: a)
+    initial = return $ Partial $ Tuple' (0 :: a) (0 :: a)
 
-  step (Tuple' s c) (a, ma) =
-    let y =
-          case ma of
-            Nothing -> a - c
-            Just old -> a - old - c
-        t = s + y
-        c1 = (t - s) - y
-    in return $ Partial $ Tuple' t c1
+    step (Tuple' s c) (a, ma) =
+        let y =
+                case ma of
+                    Nothing -> a - c
+                    Just old -> a - old - c
+            t = s + y
+            c1 = (t - s) - y
+        in return $ Partial $ Tuple' t c1
 
-  extract (Tuple' s _) = return s
+    extract (Tuple' s _) = return s
 
 -- | Window Size. It computes the size of the sliding window.
 {-# INLINE windowSize #-}
 windowSize :: MonadIO m => Fold m (a, Maybe a) Int
 windowSize = Fold.foldl' step initial
 
-  where
+    where
 
-  initial = 0 :: Int
+    initial = 0 :: Int
 
-  step w (_, ma) =
-    case ma of
-      Nothing -> w + 1
-      _ -> w
+    step w (_, ma) =
+        case ma of
+            Nothing -> w + 1
+            _ -> w
 
 -- | Arithmetic mean. This uses Kahan-Babuska-Neumaier
 -- summation, so is more accurate than 'welfordMean' unless the input
@@ -208,7 +211,8 @@ powerSum :: forall m a. (MonadIO m, Num a) => Int -> Fold m (a, Maybe a) a
 powerSum i = Fold.lmap (\(a, ma) -> (a ^ i, (^i) <$> ma)) sum
 
 {-# INLINE powerSumAvg #-}
-powerSumAvg :: forall m a. (MonadIO m, Fractional a) => Int -> Fold m (a, Maybe a) a
+powerSumAvg :: forall m a. (MonadIO m, Fractional a)
+    => Int -> Fold m (a, Maybe a) a
 powerSumAvg i = Fold.teeWith (/) (powerSum i) (fmap fromIntegral windowSize)
 
 {-# INLINE variance #-}
@@ -220,32 +224,32 @@ stdDev :: forall m a. (MonadIO m, Floating a) => Fold m (a, Maybe a) a
 stdDev = sqrt <$> variance
 
 {-# INLINE stdErrMean #-}
-stdErrMean :: forall m a. (MonadIO m, Floating a) => Int -> Fold m (a, Maybe a) a
+stdErrMean :: forall m a. (MonadIO m, Floating a)
+    => Int -> Fold m (a, Maybe a) a
 stdErrMean i =
-  Fold.teeWith
-    (\sd n -> sd / (sqrt . fromIntegral) n)
-    stdDev
-    (fmap fromIntegral windowSize)
+    Fold.teeWith
+        (\sd n -> sd / (sqrt . fromIntegral) n)
+        stdDev
+        (fmap fromIntegral windowSize)
 
 {-# INLINE skewness #-}
 skewness :: forall m a. (MonadIO m, Floating a) => Fold m (a, Maybe a) a
 skewness =
-  toFold $
-  (\p3 sd m -> p3 / sd ^ 3 - 3 * (m / sd) - (m / sd) ^ 3)
-  <$> Tee (powerSumAvg 3)
-  <*> Tee stdDev
-  <*> Tee mean
+    toFold $ (\p3 sd m -> p3 / sd ^ 3 - 3 * (m / sd) - (m / sd) ^ 3)
+    <$> Tee (powerSumAvg 3)
+    <*> Tee stdDev
+    <*> Tee mean
 
 {-# INLINE kurtosis #-}
 kurtosis :: forall m a. (MonadIO m, Floating a) => Fold m (a, Maybe a) a
 kurtosis =
-  toFold $
-  (\p4 p3 sd m ->
-     p4 / sd ^ 4 - 4 * ((m / sd) * (p3 / sd ^ 3)) - 3 * ((m / sd) ^ 4))
-  <$> Tee (powerSumAvg 4)
-  <*> Tee (powerSumAvg 3)
-  <*> Tee stdDev
-  <*> Tee mean
+    toFold $
+    (\p4 p3 sd m ->
+        p4 / sd ^ 4 - 4 * ((m / sd) * (p3 / sd ^ 3)) - 3 * ((m / sd) ^ 4))
+    <$> Tee (powerSumAvg 4)
+    <*> Tee (powerSumAvg 3)
+    <*> Tee stdDev
+    <*> Tee mean
 
 -- | Arithmetic mean. This uses Welford's algorithm to provide
 -- numerical stability, using a single pass over the sample data.
@@ -256,19 +260,20 @@ kurtosis =
 welfordMean :: forall m a. (MonadIO m, Floating a) => Fold m (a, Maybe a) a
 welfordMean = Fold step initial extract
 
-  where
+    where
 
-  initial = return $ Partial $ Tuple' (0 :: a) (0 :: Int)
+    initial = return $ Partial $ Tuple' (0 :: a) (0 :: Int)
 
-  step (Tuple' x w) (y, my) =
-      return $
-        case my of
-          Nothing -> Partial $ Tuple' (x + (y - x) / w') (w + 1)
-                      where w' = fromIntegral (w + 1)
-          Just old -> Partial $ Tuple' (x + (y - x) / w' + (x - old) / w') w
-                      where w' = fromIntegral w
+    step (Tuple' x w) (y, my) =
+        return $
+            case my of
+                Nothing -> Partial $ Tuple' (x + (y - x) / w') (w + 1)
+                            where w' = fromIntegral (w + 1)
+                Just old -> Partial $
+                                Tuple' (x + (y - x) / w' + (x - old) / w') w
+                            where w' = fromIntegral w
 
-  extract (Tuple' x _) = return x
+    extract (Tuple' x _) = return x
 
 {-# INLINE geometricMean #-}
 geometricMean :: forall m a. (MonadIO m, Floating a) => Fold m (a, Maybe a) a

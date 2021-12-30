@@ -1,40 +1,39 @@
 {-# LANGUAGE TupleSections #-}
-import Gauge
 
+import Gauge
 import System.Random (randomRIO)
+
 import Streamly.Data.Fold (Fold)
 
-import qualified Streamly.Statistics as Statistics
-import qualified Streamly.Prelude as S
 import qualified Streamly.Internal.Data.Ring.Foreign as Ring
+import qualified Streamly.Prelude as Stream
+import qualified Streamly.Statistics as Statistics
 
 {-# INLINE source #-}
-source :: (Monad m, S.IsStream t) => Int -> Int -> t m Double
+source :: (Monad m, Stream.IsStream t) => Int -> Int -> t m Double
 source len from =
-  S.enumerateFromTo (fromIntegral from) (fromIntegral (from + len))
+    Stream.enumerateFromTo (fromIntegral from) (fromIntegral (from + len))
 
 {-# INLINE benchWithFold #-}
 benchWithFold :: Int -> String -> Fold IO Double Double -> Benchmark
 benchWithFold len name f =
-  bench name $ nfIO $ randomRIO (1, 1) >>= S.fold f . source len
+    bench name $ nfIO $ randomRIO (1, 1) >>= Stream.fold f . source len
 
 {-# INLINE benchWithScan #-}
 benchWithScan :: Int -> String -> Fold IO Double Double -> Benchmark
 benchWithScan len name f =
-  bench name $ nfIO $ randomRIO (1, 1) >>= S.drain . S.scan f . source len
+    bench name $ nfIO $ randomRIO (1, 1) >>=
+        Stream.drain . Stream.scan f . source len
 
 {-# INLINE benchWithPostscan #-}
 benchWithPostscan :: Int -> String -> Fold IO Double Double -> Benchmark
 benchWithPostscan len name f =
-  bench name $ nfIO $ randomRIO (1, 1) >>= S.drain . S.postscan f . source len
+  bench name $ nfIO $ randomRIO (1, 1) >>=
+    Stream.drain . Stream.postscan f . source len
 
 {-# INLINE numElements #-}
 numElements :: Int
 numElements = 100000
-
-{-# INLINE windowSize #-}
-windowSize :: Statistics.WindowSize
-windowSize = Statistics.Finite 100
 
 main :: IO ()
 main =
@@ -69,7 +68,6 @@ main =
             numElements
             "welfordMean (window size 1000)"
             (Ring.slidingWindow 1000 Statistics.welfordMean)
-
         ]
     , bgroup
         "scan"
@@ -101,6 +99,5 @@ main =
             numElements
             "welfordMean (window size 1000)"
             (Ring.slidingWindow 1000 Statistics.welfordMean)
-
         ]
     ]
