@@ -1,9 +1,8 @@
 {-# LANGUAGE TupleSections #-}
 
 import Gauge
-import System.Random (randomRIO)
-
 import Streamly.Data.Fold (Fold)
+import System.Random (randomRIO)
 
 import qualified Streamly.Internal.Data.Ring.Foreign as Ring
 import qualified Streamly.Prelude as Stream

@@ -42,7 +42,7 @@ jobs:
       # DISABLE_BENCH: "y"
       # DISABLE_DOCS: "y"
       # DISABLE_SDIST_BUILD: "y"
-      DISABLE_SDIST_GIT_CHECK: "y"
+      # DISABLE_SDIST_GIT_CHECK: "y"
       # DISABLE_DIST_CHECKS: "y"
 
       # ------------------------------------------------------------------------
@@ -66,7 +66,8 @@ jobs:
       # ------------------------------------------------------------------------
       CABAL_CHECK_RELAX: y
       CABAL_HACKAGE_MIRROR: "hackage.haskell.org:http://hackage.fpcomplete.com"
-      CABAL_PROJECT: "cabal.project"
+      CABAL_PROJECT: ${{ matrix.cabal_project }}
+      DISABLE_SDIST_PROJECT_CHECK: y
 
       # ------------------------------------------------------------------------
       # Where to find the required tools
@@ -103,25 +104,29 @@ jobs:
         # Adding any element to the list will increase the number of matrix
         # elemets proportional to the cross product.
         include:
-          - name: ci
+          - name: 9.2.1-linux
             command: cabal-v2
             runner: ubuntu-latest
             ghc_version: 9.2.1
+            cabal_project: cabal.project.Werror
 
-          - name: ci
+          - name: 9.0.1-linux
             command: cabal-v2
             runner: ubuntu-latest
             ghc_version: 9.0.1
+            cabal_project: cabal.project
 
-          - name: ci
+          - name: 8.10.7-linux
             command: cabal-v2
             runner: ubuntu-latest
             ghc_version: 8.10.7
+            cabal_project: cabal.project
 
-          - name: ci
+          - name: 9.2.1-macos
             ghc_version: 9.2.1
             command: cabal-v2
             runner: macos-latest
+            cabal_project: cabal.project
 
     steps:
     - uses: actions/checkout@v2

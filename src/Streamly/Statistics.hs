@@ -1,11 +1,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+
 module Streamly.Statistics
     (
-    -- * Types
-    WindowSize(..)
-
     -- * Descriptive functions
-    , min
+      min
     , max
     , range
 
@@ -32,7 +30,6 @@ import qualified Streamly.Internal.Data.Ring.Foreign as Ring
 import qualified Streamly.Prelude as Stream
 
 import Prelude hiding (sum, min, max)
-import qualified Prelude as P
 
 -- XXX Make the following more numerically stable. Try to extend welfordMean
 -- XXX method.
@@ -44,15 +41,6 @@ import qualified Prelude as P
 -- XXX     * https://www.johndcook.com/blog/skewness_kurtosis/
 -- XXX     * Art of Computer Programming, Volume 2: Seminumerical Algorithms
 -- XXX       (3rd Edition), Page 232
-
-
--- | The window size for the statistics to take place in.
--- If the window size is Finite i then the sample for statistics is
--- the last i elements seen in the stream else the sample is the
--- entire stream.
-data WindowSize
-    = Finite Int
-    | Infinite
 
 data Tuple5' a b c d e = Tuple5' !a !b !c !d !e deriving Show
 
@@ -138,9 +126,11 @@ max = Fold step initial extract
             then dqloop ia q'
             else DQ.snoc ia q
 
-    extract (Tuple3' _ _ q) = return $ snd
-                                $ fromMaybe (0, error "max: Empty stream")
-                                $ DQ.head q
+    extract (Tuple3' _ _ q) =
+        return
+            $ snd
+            $ fromMaybe (0, error "max: Empty stream")
+            $ DQ.head q
 
 -- | Range. The difference between the largest and smallest elements of a
 -- window.

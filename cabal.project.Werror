@@ -1,0 +1,11 @@
+packages: streamly-statistics.cabal
+
+jobs: 1
+
+source-repository-package
+  type: git
+  location: https://github.com/composewell/streamly.git
+  tag: master
+
+package streamly-statistics
+  ghc-options: -Werror
