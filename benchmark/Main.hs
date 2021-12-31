@@ -18,12 +18,6 @@ benchWithFold :: Int -> String -> Fold IO Double Double -> Benchmark
 benchWithFold len name f =
     bench name $ nfIO $ randomRIO (1, 1) >>= Stream.fold f . source len
 
-{-# INLINE benchWithScan #-}
-benchWithScan :: Int -> String -> Fold IO Double Double -> Benchmark
-benchWithScan len name f =
-    bench name $ nfIO $ randomRIO (1, 1) >>=
-        Stream.drain . Stream.scan f . source len
-
 {-# INLINE benchWithPostscan #-}
 benchWithPostscan :: Int -> String -> Fold IO Double Double -> Benchmark
 benchWithPostscan len name f =

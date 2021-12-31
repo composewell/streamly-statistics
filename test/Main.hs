@@ -1,8 +1,6 @@
 {-# LANGUAGE TupleSections #-}
 
-import System.Random
 import Test.Hspec
-import Test.Hspec.QuickCheck
 
 import Streamly.Statistics
 
@@ -25,9 +23,9 @@ main = hspec $ do
                 a <- runIO $ S.fold (Ring.slidingWindow winSize f) c
                 b <- runIO $ S.fold f $ S.drop (numElem - winSize)
                         $ S.map (, Nothing) c
-                let c = a - b
+                let c1 = a - b
                 it ("should not deviate more than " ++ show deviationLimit)
-                    $ c >= -1 * deviationLimit && c <= deviationLimit
+                    $ c1 >= -1 * deviationLimit && c1 <= deviationLimit
 
         describe "Sum" $ testFunc sum
         describe "mean" $ testFunc mean
@@ -40,7 +38,6 @@ main = hspec $ do
 
             testFunc tc f sI sW = do
                 let c = S.fromList tc
-                    numElem = length tc
                 a <- runIO $ S.toList $ S.postscan f $ S.map (, Nothing) c
                 b <- runIO $ S.toList $ S.postscan
                         (Ring.slidingWindow winSize f) c

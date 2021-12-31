@@ -8,7 +8,13 @@ module Streamly.Statistics
     , range
 
     -- * Statistics of a location
+    , kurtosis
+    , geometricMean
+    , skewness
+    , stdDev
+    , stdErrMean
     , sum
+    , sumInt
     , mean
     , welfordMean
     )
@@ -18,16 +24,12 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Data.Bifunctor(bimap)
 import Data.Function ((&))
 import Data.Maybe (fromMaybe)
-import Foreign.Storable (Storable(..))
 import Streamly.Data.Fold.Tee(Tee(..), toFold)
 import Streamly.Internal.Data.Fold.Type (Fold(..), Step(..))
 import Streamly.Internal.Data.Tuple.Strict
 
 import qualified Deque.Strict as DQ
 import qualified Streamly.Data.Fold as Fold
-import qualified Streamly.Internal.Data.Fold as Fold
-import qualified Streamly.Internal.Data.Ring.Foreign as Ring
-import qualified Streamly.Prelude as Stream
 
 import Prelude hiding (sum, min, max)
 
@@ -48,7 +50,7 @@ data Tuple5' a b c d e = Tuple5' !a !b !c !d !e deriving Show
 --
 -- /Time complexity/: @O(n^2)@ where @n@ is the window size.
 {-# INLINE min #-}
-min :: (Monad m, Num a, Ord a, Storable a) => Fold m (a, Maybe a) a
+min :: (Monad m, Ord a) => Fold m (a, Maybe a) a
 min = Fold step initial extract
 
     where
@@ -61,7 +63,7 @@ min = Fold step initial extract
             Nothing ->
                 return $ Partial $ Tuple3' (i + 1) (w + 1)
                     (headCheck i q (w + 1) & dqloop (i, a))
-            Just old ->
+            Just _ ->
                 return $ Partial $ Tuple3' (i + 1) w
                     (headCheck i q w & dqloop (i,a))
 
@@ -91,7 +93,7 @@ min = Fold step initial extract
 --
 -- /Time complexity/: @O(n^2)@ where @n@ is the window size.
 {-# INLINE max #-}
-max :: (Monad m, Num a, Ord a, Storable a) => Fold m (a, Maybe a) a
+max :: (Monad m, Ord a) => Fold m (a, Maybe a) a
 max = Fold step initial extract
 
     where
@@ -104,7 +106,7 @@ max = Fold step initial extract
             Nothing ->
                 return $ Partial $ Tuple3' (i + 1) (w + 1)
                     (headCheck i q (w + 1) & dqloop (i, a))
-            Just old ->
+            Just _ ->
                 return $ Partial $ Tuple3' (i + 1) w
                     (headCheck i q w & dqloop (i,a))
 
@@ -135,10 +137,10 @@ max = Fold step initial extract
 -- | Range. The difference between the largest and smallest elements of a
 -- window.
 {-# INLINE range #-}
-range :: (Monad m, Num a, Ord a, Storable a) => Fold m (a, Maybe a) a
+range :: (Monad m, Num a, Ord a) => Fold m (a, Maybe a) a
 range = Fold.teeWith (-) max min
 
--- | The sum of all the elements in the sample.
+-- | The sum of all the elements in the window.
 {-# INLINE sumInt #-}
 sumInt :: forall m a. (MonadIO m, Num a) => Fold m (a, Maybe a) a
 sumInt = Fold step initial extract
@@ -154,7 +156,7 @@ sumInt = Fold step initial extract
 
     extract = return
 
--- | The sum of all the elements in the sample. This uses Kahan-Babuska-Neumaier
+-- | The sum of all the elements in the window. This uses Kahan-Babuska-Neumaier
 -- summation.
 {-# INLINE sum #-}
 sum :: forall m a. (MonadIO m, Num a) => Fold m (a, Maybe a) a
@@ -207,25 +209,25 @@ powerSumAvg i = Fold.teeWith (/) (powerSum i) (fmap fromIntegral windowSize)
 
 {-# INLINE variance #-}
 variance :: forall m a. (MonadIO m, Fractional a) => Fold m (a, Maybe a) a
-variance = Fold.teeWith (\p2 m -> p2 - m ^ 2) (powerSumAvg 2) mean
+variance = Fold.teeWith (\p2 m -> p2 - m ^ (2 :: Integer)) (powerSumAvg 2) mean
 
 {-# INLINE stdDev #-}
 stdDev :: forall m a. (MonadIO m, Floating a) => Fold m (a, Maybe a) a
 stdDev = sqrt <$> variance
 
 {-# INLINE stdErrMean #-}
-stdErrMean :: forall m a. (MonadIO m, Floating a)
-    => Int -> Fold m (a, Maybe a) a
-stdErrMean i =
+stdErrMean :: forall m a. (MonadIO m, Floating a) => Fold m (a, Maybe a) a
+stdErrMean =
     Fold.teeWith
-        (\sd n -> sd / (sqrt . fromIntegral) n)
+        (\sd n -> sd / sqrt n)
         stdDev
         (fmap fromIntegral windowSize)
 
 {-# INLINE skewness #-}
 skewness :: forall m a. (MonadIO m, Floating a) => Fold m (a, Maybe a) a
 skewness =
-    toFold $ (\p3 sd m -> p3 / sd ^ 3 - 3 * (m / sd) - (m / sd) ^ 3)
+    toFold $ (\p3 sd m -> p3 / sd ^ (3 :: Int) - 3 * (m / sd)
+                - (m / sd) ^ (3 :: Int))
     <$> Tee (powerSumAvg 3)
     <*> Tee stdDev
     <*> Tee mean
@@ -235,7 +237,8 @@ kurtosis :: forall m a. (MonadIO m, Floating a) => Fold m (a, Maybe a) a
 kurtosis =
     toFold $
     (\p4 p3 sd m ->
-        p4 / sd ^ 4 - 4 * ((m / sd) * (p3 / sd ^ 3)) - 3 * ((m / sd) ^ 4))
+        p4 / sd ^ (4 :: Int) - 4 * ((m / sd) * (p3 / sd ^ (3 :: Int))) -
+            3 * ((m / sd) ^ (4 :: Int)))
     <$> Tee (powerSumAvg 4)
     <*> Tee (powerSumAvg 3)
     <*> Tee stdDev
