@@ -17,6 +17,7 @@ module Streamly.Statistics
     , sumInt
     , mean
     , welfordMean
+    , weightedMean
     )
 where
 
@@ -24,6 +25,9 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Data.Bifunctor(bimap)
 import Data.Function ((&))
 import Data.Maybe (fromMaybe)
+import Foreign.Ptr (castPtr, plusPtr)
+import Foreign.Storable
+
 import Streamly.Data.Fold.Tee(Tee(..), toFold)
 import Streamly.Internal.Data.Fold.Type (Fold(..), Step(..))
 import Streamly.Internal.Data.Tuple.Strict
@@ -32,6 +36,19 @@ import qualified Deque.Strict as DQ
 import qualified Streamly.Data.Fold as Fold
 
 import Prelude hiding (sum, min, max)
+
+instance Storable (Double, Double) where
+    sizeOf _ = 2 * sizeOf (undefined :: Double)
+    alignment _ = 16
+    peek p = do
+        let q = castPtr p
+        a <- peek q
+        b <- peek (q `plusPtr` sizeOf a)
+        return (a, b)
+    poke p (a, b) = do
+        let q = castPtr p
+        poke q a
+        poke (q `plusPtr` sizeOf a) b
 
 -- XXX Make the following more numerically stable. Try to extend welfordMean
 -- XXX method.
@@ -271,3 +288,27 @@ welfordMean = Fold step initial extract
 {-# INLINE geometricMean #-}
 geometricMean :: forall m a. (MonadIO m, Floating a) => Fold m (a, Maybe a) a
 geometricMean = exp <$> Fold.lmap (bimap log (log <$>)) mean
+
+-- | @weightedMean@ computes the weighted mean of the sample data.
+--
+-- The weights should add up to 1. It uses Kahan-Babuska-Neumaier summation.
+--
+{-# INLINE weightedMean #-}
+weightedMean :: forall m a. (MonadIO m, Fractional a)
+    => Fold m ((a, a), Maybe (a, a)) a
+weightedMean = Fold step initial extract
+
+    where
+
+    initial = return $ Partial $ Tuple' (0 :: a) (0 :: a)
+
+    step (Tuple' s c) ((wNew, vNew), old) =
+        let y =
+                case old of
+                    Nothing -> wNew * vNew - c
+                    Just (wOld, vOld) -> wNew * vNew - wOld * vOld - c
+            t = s + y
+            c1 = (t - s) - y
+        in return $ Partial $ Tuple' t c1
+
+    extract (Tuple' x _) = return x
