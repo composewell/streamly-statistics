@@ -296,19 +296,9 @@ geometricMean = exp <$> Fold.lmap (bimap log (log <$>)) mean
 {-# INLINE weightedMean #-}
 weightedMean :: forall m a. (MonadIO m, Fractional a)
     => Fold m ((a, a), Maybe (a, a)) a
-weightedMean = Fold step initial extract
+weightedMean = Fold.lmap func sum
 
     where
 
-    initial = return $ Partial $ Tuple' (0 :: a) (0 :: a)
-
-    step (Tuple' s c) ((wNew, vNew), old) =
-        let y =
-                case old of
-                    Nothing -> wNew * vNew - c
-                    Just (wOld, vOld) -> wNew * vNew - wOld * vOld - c
-            t = s + y
-            c1 = (t - s) - y
-        in return $ Partial $ Tuple' t c1
-
-    extract (Tuple' x _) = return x
+    func ((w, v), Nothing) = (w * v, Nothing)
+    func ((w, v), Just (w1, v1)) = (w * v, Just $ w1 * v1)
