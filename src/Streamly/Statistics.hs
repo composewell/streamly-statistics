@@ -25,7 +25,6 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Data.Bifunctor(bimap)
 import Data.Function ((&))
 import Data.Maybe (fromMaybe)
-import Foreign.Ptr (castPtr, plusPtr)
 import Foreign.Storable
 
 import Streamly.Data.Fold.Tee(Tee(..), toFold)
@@ -38,18 +37,6 @@ import qualified Streamly.Data.Fold as Fold
 
 import Prelude hiding (sum, min, max)
 
-instance Storable (Double, Double) where
-    sizeOf _ = 2 * sizeOf (undefined :: Double)
-    alignment _ = 16
-    peek p = do
-        let q = castPtr p
-        a <- peek q
-        b <- peek (q `plusPtr` sizeOf a)
-        return (a, b)
-    poke p (a, b) = do
-        let q = castPtr p
-        poke q a
-        poke (q `plusPtr` sizeOf a) b
 
 -- XXX Make the following more numerically stable. Try to extend welfordMean
 -- XXX method.
