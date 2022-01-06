@@ -30,7 +30,8 @@ import Foreign.Storable
 
 import Streamly.Data.Fold.Tee(Tee(..), toFold)
 import Streamly.Internal.Data.Fold.Type (Fold(..), Step(..))
-import Streamly.Internal.Data.Tuple.Strict
+import Streamly.Internal.Data.Ring.Foreign (slidingWindow)
+import Streamly.Internal.Data.Tuple.Strict (Tuple'(..), Tuple3'(..))
 
 import qualified Deque.Strict as DQ
 import qualified Streamly.Data.Fold as Fold
@@ -294,11 +295,6 @@ geometricMean = exp <$> Fold.lmap (bimap log (log <$>)) mean
 -- The weights should add up to 1. It uses Kahan-Babuska-Neumaier summation.
 --
 {-# INLINE weightedMean #-}
-weightedMean :: forall m a. (MonadIO m, Fractional a)
-    => Fold m ((a, a), Maybe (a, a)) a
-weightedMean = Fold.lmap func sum
-
-    where
-
-    func ((w, v), Nothing) = (w * v, Nothing)
-    func ((w, v), Just (w1, v1)) = (w * v, Just $ w1 * v1)
+weightedMean :: forall m a. (MonadIO m, Fractional a, Storable a)
+    => Int -> Fold m (a, a) a
+weightedMean n = Fold.lmap (uncurry (*)) (slidingWindow n sum)
