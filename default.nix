@@ -41,11 +41,10 @@ let haskellPackages =
 
                     streamly =
                       nixpkgs.haskell.lib.overrideCabal
-                        (super.callHackageDirect
-                          { pkg = "streamly";
-                            ver = "0.8.1";
-                            sha256 = "0ywyy7gxjnp32hx8kki0lfn94bnc9mzjh8g6mg65ff3vv28k2vdr";
-                          } {})
+                        (let src = fetchGit {
+                            url = "git@github.com:composewell/streamly.git";
+                            rev = "8df3dc4c70f3f4a2daa3b5cada7390e0c44e8394";
+                        }; in super.callCabal2nix "streamly" src {})
                         (old:
                           { librarySystemDepends =
                               if builtins.currentSystem == "x86_64-darwin"
