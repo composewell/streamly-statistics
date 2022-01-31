@@ -36,10 +36,6 @@ benchWithPostscan len name f =
 numElements :: Int
 numElements = 100000
 
-{-# INLINE maxWindow #-}
-maxWindow :: Fold m (a, Maybe a) b -> Fold m a b
-maxWindow f = Fold.lmap (\x -> (x, Nothing)) f
-
 main :: IO ()
 main =
   defaultMain
@@ -70,7 +66,7 @@ main =
         , benchWithFold numElements "sum (window size 1000)"
             (Ring.slidingWindow 1000 Statistics.sum)
         , benchWithFold numElements "sum (entire stream)"
-            (maxWindow Statistics.sum)
+            (Statistics.noSlide Statistics.sum)
         , benchWithFold numElements "sum (Data.Fold)"
             (Fold.sum)
 
@@ -79,7 +75,7 @@ main =
         , benchWithFold numElements "mean (window size 1000)"
             (Ring.slidingWindow 1000 Statistics.mean)
         , benchWithFold numElements "mean (entire stream)"
-            (maxWindow Statistics.mean)
+            (Statistics.noSlide Statistics.mean)
         , benchWithFold numElements "mean (Data.Fold)"
             (Fold.mean)
 
@@ -94,38 +90,38 @@ main =
         , benchWithFold
             numElements
             "welfordMean (entire stream)"
-            (maxWindow Statistics.welfordMean)
+            (Statistics.noSlide Statistics.welfordMean)
 
         , benchWithFold numElements "geometricMean (window size 100)"
             (Ring.slidingWindow 100 Statistics.geometricMean)
         , benchWithFold numElements "geometricMean (window size 1000)"
             (Ring.slidingWindow 1000 Statistics.geometricMean)
         , benchWithFold numElements "geometricMean (entire stream)"
-            (maxWindow Statistics.geometricMean)
+            (Statistics.noSlide Statistics.geometricMean)
 
         , benchWithFold numElements "harmonicMean (window size 100)"
             (Ring.slidingWindow 100 Statistics.harmonicMean)
         , benchWithFold numElements "harmonicMean (window size 1000)"
             (Ring.slidingWindow 1000 Statistics.harmonicMean)
         , benchWithFold numElements "harmonicMean (entire stream)"
-            (maxWindow Statistics.harmonicMean)
+            (Statistics.noSlide Statistics.harmonicMean)
 
         , benchWithFold numElements "quadraticMean (window size 100)"
             (Ring.slidingWindow 100 Statistics.quadraticMean)
         , benchWithFold numElements "quadraticMean (window size 1000)"
             (Ring.slidingWindow 1000 Statistics.quadraticMean)
         , benchWithFold numElements "quadraticMean (entire stream)"
-            (maxWindow Statistics.quadraticMean)
+            (Statistics.noSlide Statistics.quadraticMean)
 
         , benchWithFold numElements "powerSum 2 (window size 100)"
             (Ring.slidingWindow 100 (Statistics.powerSum 2))
         , benchWithFold numElements "powerSum 2 (entire stream)"
-            (maxWindow (Statistics.powerSum 2))
+            (Statistics.noSlide (Statistics.powerSum 2))
 
         , benchWithFold numElements "rawMoment 2 (window size 100)"
             (Ring.slidingWindow 100 (Statistics.powerSum 2))
         , benchWithFold numElements "rawMoment 2 (entire stream)"
-            (maxWindow (Statistics.rawMoment 2))
+            (Statistics.noSlide (Statistics.rawMoment 2))
 
         , benchWithFold numElements "powerMean 1 (window size 100)"
             (Ring.slidingWindow 100 (Statistics.powerMean 1))
@@ -146,41 +142,41 @@ main =
         , benchWithFold numElements "variance (window size 100)"
             (Ring.slidingWindow 100 (Statistics.variance))
         , benchWithFold numElements "variance (entire stream)"
-            (maxWindow (Statistics.variance))
+            (Statistics.noSlide (Statistics.variance))
         , benchWithFold numElements "variance (Data.Fold)"
             (Fold.variance)
 
         , benchWithFold numElements "sampleVariance (window size 100)"
             (Ring.slidingWindow 100 (Statistics.sampleVariance))
         , benchWithFold numElements "sampleVariance (entire stream)"
-            (maxWindow (Statistics.sampleVariance))
+            (Statistics.noSlide (Statistics.sampleVariance))
 
         , benchWithFold numElements "stdDev (window size 100)"
             (Ring.slidingWindow 100 (Statistics.stdDev))
         , benchWithFold numElements "stdDev (entire stream)"
-            (maxWindow (Statistics.stdDev))
+            (Statistics.noSlide (Statistics.stdDev))
         , benchWithFold numElements "stdDev (Data.Fold)"
             (Fold.stdDev)
 
         , benchWithFold numElements "sampleStdDev (window size 100)"
             (Ring.slidingWindow 100 (Statistics.sampleStdDev))
         , benchWithFold numElements "sampleStdDev (entire stream)"
-            (maxWindow (Statistics.sampleStdDev))
+            (Statistics.noSlide (Statistics.sampleStdDev))
 
         , benchWithFold numElements "stdErrMean (window size 100)"
             (Ring.slidingWindow 100 (Statistics.stdErrMean))
         , benchWithFold numElements "stdErrMean (entire stream)"
-            (maxWindow (Statistics.stdErrMean))
+            (Statistics.noSlide (Statistics.stdErrMean))
 
         , benchWithFold numElements "skewness (window size 100)"
             (Ring.slidingWindow 100 (Statistics.skewness))
         , benchWithFold numElements "skewness (entire stream)"
-            (maxWindow (Statistics.skewness))
+            (Statistics.noSlide (Statistics.skewness))
 
         , benchWithFold numElements "kurtosis (window size 100)"
             (Ring.slidingWindow 100 (Statistics.kurtosis))
         , benchWithFold numElements "kurtosis (entire stream)"
-            (maxWindow (Statistics.kurtosis))
+            (Statistics.noSlide (Statistics.kurtosis))
         ]
     , bgroup
         "scan"
