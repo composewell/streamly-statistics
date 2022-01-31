@@ -71,6 +71,7 @@ module Streamly.Statistics
     (
     -- * Rolling Window Folds
       lmap
+    , noSlide
 
     -- * Summary Statistics
 
@@ -154,6 +155,15 @@ import Prelude hiding (length, sum, min, max)
 {-# INLINE lmap #-}
 lmap :: (c -> a) -> Fold m (a, Maybe a) b -> Fold m (c, Maybe c) b
 lmap f = Fold.lmap (bimap f (f <$>))
+
+-- | Convert a rolling fold to a normal fold using the entire input stream as a
+-- single window.
+--
+-- >>> noSlide f = Fold.lmap (, Nothing) f
+--
+{-# INLINE noSlide #-}
+noSlide :: Fold m (a, Maybe a) b -> Fold m a b
+noSlide f = Fold.lmap (, Nothing) f
 
 -------------------------------------------------------------------------------
 -- Location
