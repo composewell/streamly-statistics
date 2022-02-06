@@ -116,6 +116,7 @@ test-suite test
 
 benchmark benchmark
     import: ghc-options
+    ghc-options: +RTS -M3G -RTS
     type: exitcode-stdio-1.0
     hs-source-dirs:   benchmark
     main-is:          Main.hs
