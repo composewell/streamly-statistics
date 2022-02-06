@@ -32,6 +32,11 @@ flag use-gauge
     manual: True
     default: False
 
+flag fusion-plugin
+  description: Use fusion plugin for for best performance
+  manual: True
+  default: False
+
 common default-extensions
     default-extensions:
         BangPatterns
@@ -84,6 +89,7 @@ common optimization-options
                  -fdicts-strict
                  -fspec-constr-recursive=16
                  -fmax-worker-args=16
+                 -fsimpl-tick-factor=200
 
 common ghc-options
     import: default-extensions, compile-options, optimization-options
@@ -128,3 +134,8 @@ benchmark benchmark
         (Test.Tasty.Bench as Gauge
         ,Test.Tasty.Bench as Gauge.Main
         )
+    if flag(fusion-plugin) && !impl(ghcjs) && !impl(ghc < 8.6)
+       cpp-options: -DFUSION_PLUGIN
+       ghc-options: -fplugin Fusion.Plugin
+       build-depends:
+           fusion-plugin     >= 0.2   && < 0.3
