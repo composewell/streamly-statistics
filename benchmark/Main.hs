@@ -139,6 +139,13 @@ main =
         , benchWithFold numElements "powerMeanFrac 10 (window size 100)"
             (Ring.slidingWindow 100 (Statistics.powerMeanFrac 10))
 
+        , benchWithFold numElements "ewma (entire stream)"
+            (Statistics.ewma 0.5)
+        , benchWithFold numElements "ewmaAfterMean (entire stream)"
+            (Statistics.ewmaAfterMean 10 0.5)
+        , benchWithFold numElements "ewmaRampUpSmoothing (entire stream)"
+            (Statistics.ewmaRampUpSmoothing 0.5 0.5)
+
         , benchWithFold numElements "variance (window size 100)"
             (Ring.slidingWindow 100 (Statistics.variance))
         , benchWithFold numElements "variance (entire stream)"
