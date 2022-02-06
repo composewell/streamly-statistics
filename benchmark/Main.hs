@@ -202,6 +202,9 @@ main =
         , benchWithFold numElements "stdErrMean (entire stream)"
             (Statistics.noSlide (Statistics.stdErrMean))
 
+-- These benchmarks take a lot of time/memory with fusion-plugin possibly
+-- because of the use of Tee.
+#ifndef FUSION_PLUGIN
         , benchWithFold numElements "skewness (window size 100)"
             (Ring.slidingWindow 100 (Statistics.skewness))
         , benchWithFold numElements "skewness (entire stream)"
@@ -211,6 +214,7 @@ main =
             (Ring.slidingWindow 100 (Statistics.kurtosis))
         , benchWithFold numElements "kurtosis (entire stream)"
             (Statistics.noSlide (Statistics.kurtosis))
+#endif
         ]
     , bgroup
         "scan"
