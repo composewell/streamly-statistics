@@ -114,19 +114,19 @@ jobs:
             command: cabal-v2
             runner: ubuntu-latest
             ghc_version: 9.0.1
-            cabal_project: cabal.project
+            cabal_project: cabal.project.user
 
           - name: 8.10.7-linux
             command: cabal-v2
             runner: ubuntu-latest
             ghc_version: 8.10.7
-            cabal_project: cabal.project
+            cabal_project: cabal.project.user
 
           - name: 9.2.1-macos
             ghc_version: 9.2.1
             command: cabal-v2
             runner: macos-latest
-            cabal_project: cabal.project
+            cabal_project: cabal.project.user
 
     steps:
     - uses: actions/checkout@v2
