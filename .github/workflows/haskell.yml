@@ -67,6 +67,7 @@ jobs:
       CABAL_CHECK_RELAX: y
       CABAL_HACKAGE_MIRROR: "hackage.haskell.org:http://hackage.fpcomplete.com"
       CABAL_PROJECT: ${{ matrix.cabal_project }}
+      CABAL_BUILD_OPTIONS: ${{ matrix.cabal_build_options }}
       DISABLE_SDIST_PROJECT_CHECK: y
 
       # ------------------------------------------------------------------------
@@ -97,12 +98,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The reason we have name here is to force an additional config instead
-        # of adding to an existing config while adding additional configs.
-        # Look at <https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#jobsjob_idstrategymatrix>
-        # for more info about adding matrix elements.
-        # Adding any element to the list will increase the number of matrix
-        # elemets proportional to the cross product.
         include:
           - name: 9.2.1-linux
             command: cabal-v2
@@ -121,6 +116,13 @@ jobs:
             runner: ubuntu-latest
             ghc_version: 8.10.7
             cabal_project: cabal.project.user
+
+          - name: 8.10.7-linux-fusion-plugin
+            command: cabal-v2
+            runner: ubuntu-latest
+            ghc_version: 8.10.7
+            cabal_project: cabal.project.user
+            cabal_build_options: "--flag fusion-plugin"
 
           - name: 9.2.1-macos
             ghc_version: 9.2.1
