@@ -9,19 +9,9 @@
 -- Statistical measures over a stream of data. All operations use numerically
 -- stable floating point arithmetic.
 --
--- Measurements can be performed over the entire input stream or on a rolling
+-- Measurements can be performed over the entire input stream or on a sliding
 -- window of fixed or variable size.  Where possible, measures are computed
 -- online without buffering the input stream.
---
--- Folds of type @Fold m (a, Maybe a) b@ are rolling window folds. An input of
--- type (a, Nothing) indicates that the input element is inserted in the window
--- increasing the window size by 1. An input of type (a, Just a) indicates that
--- the first element is being inserted in the window and the second element is
--- being removed from the window, the window size remains the same. The window
--- size can only increase and never decrease.
---
--- You can compute the statistics over the entire stream using rolling window
--- folds by supplying the second element of the input tuple as Nothing always.
 --
 -- Currently there is no overflow detection.
 --
@@ -69,7 +59,19 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Streamly.Statistics
     (
-    -- * Rolling Window Folds
+    -- * Incremental Folds
+    -- | Folds of type @Fold m (a, Maybe a) b@ are incremental sliding window
+    -- folds. An input of type @(a, Nothing)@ indicates that the input element
+    -- @a@ is being inserted in the window without ejecting an old value
+    -- increasing the window size by 1. An input of type @(a, Just a)@
+    -- indicates that the first element is being inserted in the window and the
+    -- second element is being removed from the window, the window size remains
+    -- the same. The window size can only increase and never decrease.
+    --
+    -- You can compute the statistics over the entire stream using sliding
+    -- window folds by keeping the second element of the input tuple as
+    -- @Nothing@.
+    --
       lmap
     , noSlide
 
@@ -98,6 +100,11 @@ module Streamly.Statistics
     -- Generalized mean
     , powerMean
     , powerMeanFrac
+
+    -- ** Exponential Smoothing
+    , ewma
+    , ewmaAfterMean
+    , ewmaRampUpSmoothing
 
     -- ** Spread
     -- | Central moments are a statistical measure of dispersion.  The \(k\)th
@@ -171,6 +178,10 @@ noSlide f = Fold.lmap (, Nothing) f
 
 -- Theoretically, we can approximate minimum in a rolling window by using a
 -- 'powerMean' with sufficiently large negative power.
+--
+-- XXX If we need to know the minimum in the window only once in a while then
+-- we can use linear search when it is extracted and not pay the cost all the
+-- time.
 --
 -- | The minimum element in a rolling window.
 --
@@ -379,11 +390,15 @@ length = Fold.foldl' step 0
     step w (_, Nothing) = w + 1
     step w _ = w
 
--- | Arithmetic mean of elements in a rolling window:
+-- | Arithmetic mean of elements in a sliding window:
 --
 -- \(\mu = \frac{\sum_{i=1}^n x_{i}}{n}\)
 --
--- Mean is the first raw moment.
+-- This is also known as the Simple Moving Average (SMA) when used in the
+-- sliding window and Cumulative Moving Avergae (CMA) when used on the entire
+-- stream.
+--
+-- Mean is the same as the first raw moment.
 --
 -- \(\mu = \mu'_1\)
 --
@@ -680,7 +695,7 @@ welfordMean = Fold step initial extract
 --
 -- \(GM = \left(\prod_{i=1}^n x_i\right)^\frac{1}{n}\)
 --
--- or, equivalently, as the arithmetic mean in logspace:
+-- or, equivalently, as the arithmetic mean in log space:
 --
 -- \(GM = e ^{{\frac{\sum_{i=1}^{n}\ln a_i}{n}}}\)
 --
@@ -690,3 +705,78 @@ welfordMean = Fold step initial extract
 {-# INLINE geometricMean #-}
 geometricMean :: (Monad m, Floating a) => Fold m (a, Maybe a) a
 geometricMean = exp <$> lmap log mean
+
+-- XXX Is this numerically stable? We can use the kbn summation here.
+-- | ewmaStep smoothing-factor old-value new-value
+{-# INLINE ewmaStep #-}
+ewmaStep :: Double -> Double -> Double -> Double
+ewmaStep k x0 x1 = (1 - k) * x0 + k * x1
+
+-- XXX Compute this in a sliding window?
+--
+-- | @ewma smoothingFactor@.
+--
+-- @ewma@ of an empty stream is 0.
+--
+-- Exponential weighted moving average, \(s_n\), of \(n\) values,
+-- \(x_1,\ldots,x_n\), is defined recursively as:
+--
+-- \(\begin{align} s_0& = x_0\\ s_n & = \alpha x_{n} + (1-\alpha)s_{n-1},\quad n>0 \end{align}\)
+--
+-- If we expand the recursive term it becomes an exponential series:
+--
+-- \(s_n = \alpha \left[x_n + (1-\alpha)x_{n-1} + (1-\alpha)^2 x_{n-2} + \cdots + (1-\alpha)^{n-1} x_1 \right] + (1-\alpha)^n x_0\)
+--
+-- where \(\alpha\), the smoothing factor, is in the range \(0 <\alpha < 1\).
+-- More the value of \(\alpha\), the more weight is given to newer values.  As
+-- a special case if it is 0 then the weighted sum would always be the same as
+-- the oldest value, if it is 1 then the sum would always be the same as the
+-- newest value.
+--
+-- See https://en.wikipedia.org/wiki/Moving_average
+--
+-- See https://en.wikipedia.org/wiki/Exponential_smoothing
+--
+{-# INLINE ewma #-}
+ewma :: Monad m => Double -> Fold m Double Double
+ewma k = extract <$> Fold.foldl' step (Tuple' 0 1)
+
+    where
+
+    step (Tuple' x0 k1) x = Tuple' (ewmaStep k1 x0 x) k
+
+    extract (Tuple' x _) = x
+
+-- XXX It can perhaps perform better if implemented as a custom fold?
+--
+-- | @ewma n k@ is like 'ewma' but uses the mean of the first @n@ values and
+-- then uses that as the initial value for the @ewma@ of the rest of the
+-- values.
+--
+-- This can be used to reduce the effect of volatility of the initial value
+-- when k is too small.
+--
+{-# INLINE ewmaAfterMean #-}
+ewmaAfterMean :: Monad m => Int -> Double -> Fold m Double Double
+ewmaAfterMean n k =
+    Fold.concatMap (\i -> (Fold.foldl' (ewmaStep k) i)) (Fold.take n Fold.mean)
+
+-- | @ewma n k@ is like 'ewma' but uses 1 as the initial smoothing factor and
+-- then exponentially smooths it to @k@ using @n@ as the smoothing factor.
+--
+-- This is significantly faster than 'ewmaAfterMean'.
+--
+{-# INLINE ewmaRampUpSmoothing #-}
+ewmaRampUpSmoothing :: Monad m => Double -> Double -> Fold m Double Double
+ewmaRampUpSmoothing n k1 = extract <$> Fold.foldl' step initial
+
+    where
+
+    initial = Tuple' 0 1
+
+    step (Tuple' x0 k0) x1 =
+        let x = ewmaStep k0 x0 x1
+            k = ewmaStep n k0 k1
+        in Tuple' x k
+
+    extract (Tuple' x _) = x
