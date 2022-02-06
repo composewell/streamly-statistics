@@ -1,7 +1,8 @@
 {-# LANGUAGE TupleSections #-}
 
-import Gauge
+import Control.DeepSeq (NFData)
 import Streamly.Data.Fold (Fold)
+import Streamly.Prelude (SerialT)
 import System.Random (randomRIO)
 
 import qualified Streamly.Data.Fold as Fold
@@ -9,28 +10,48 @@ import qualified Streamly.Internal.Data.Ring.Foreign as Ring
 import qualified Streamly.Prelude as Stream
 import qualified Streamly.Statistics as Statistics
 
+import Gauge
+
 {-# INLINE source #-}
 source :: (Monad m, Stream.IsStream t, Num a, Stream.Enumerable a) =>
-    a -> a -> t m a
-source len from = Stream.enumerateFromTo from (from + len)
+    Int -> a -> t m a
+source len from =
+    Stream.enumerateFromThenTo from (from + 1) (from + fromIntegral len)
+
+{-# INLINE sourceDescending #-}
+sourceDescending :: (Monad m, Stream.IsStream t, Num a, Stream.Enumerable a) =>
+    Int -> a -> t m a
+sourceDescending len from =
+    Stream.enumerateFromThenTo
+        (from + fromIntegral len)
+        (from + fromIntegral (len - 1))
+        from
+
+{-# INLINE sourceDescendingInt #-}
+sourceDescendingInt :: (Monad m, Stream.IsStream t) => Int -> Int -> t m Int
+sourceDescendingInt = sourceDescending
+
+{-# INLINE benchWith #-}
+benchWith :: (Num a, NFData a) =>
+    (Int -> a -> SerialT IO a) -> Int -> String -> Fold IO a a -> Benchmark
+benchWith src len name f =
+    bench name
+        $ nfIO
+        $ randomRIO (1, 1 :: Int) >>= Stream.fold f . src len . fromIntegral
 
 {-# INLINE benchWithFold #-}
 benchWithFold :: Int -> String -> Fold IO Double Double -> Benchmark
-benchWithFold len name f =
-    bench name
-        $ nfIO
-        $ randomRIO (1, 1) >>= Stream.fold f . source (fromIntegral len)
+benchWithFold len name f = benchWith source len name f
 
 {-# INLINE benchWithFoldInt #-}
 benchWithFoldInt :: Int -> String -> Fold IO Int Int -> Benchmark
-benchWithFoldInt len name f =
-    bench name $ nfIO $ randomRIO (1, 1) >>= Stream.fold f . source len
+benchWithFoldInt len name f = benchWith source len name f
 
 {-# INLINE benchWithPostscan #-}
 benchWithPostscan :: Int -> String -> Fold IO Double Double -> Benchmark
 benchWithPostscan len name f =
   bench name $ nfIO $ randomRIO (1, 1) >>=
-    Stream.drain . Stream.postscan f . source (fromIntegral len)
+    Stream.drain . Stream.postscan f . source len
 
 {-# INLINE numElements #-}
 numElements :: Int
@@ -45,10 +66,16 @@ main =
             (Ring.slidingWindow 100 Statistics.min)
         , benchWithFold numElements "min (window size 1000)"
             (Ring.slidingWindow 1000 Statistics.min)
+        , benchWith sourceDescendingInt numElements
+            "min descending (window size 1000)"
+            (Ring.slidingWindow 1000 Statistics.min)
 
         , benchWithFold numElements "max (window size 100)"
             (Ring.slidingWindow 100 Statistics.max)
         , benchWithFold numElements "max (window size 1000)"
+            (Ring.slidingWindow 1000 Statistics.max)
+        , benchWith sourceDescendingInt numElements
+            "max descending (window size 1000)"
             (Ring.slidingWindow 1000 Statistics.max)
 
         , benchWithFold numElements "range (window size 100)"
