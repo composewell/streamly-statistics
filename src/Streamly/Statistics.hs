@@ -117,6 +117,7 @@ module Streamly.Statistics
     -- See https://en.wikipedia.org/wiki/Statistical_dispersion .
     , range
 
+    , meanAbsDev
     , variance
     , stdDev
     , skewness
@@ -538,6 +539,24 @@ harmonicMean = Fold.teeWith (/) length (lmap recip sum)
 {-# INLINE quadraticMean #-}
 quadraticMean :: (Monad m, Floating a) => Fold m (a, Maybe a) a
 quadraticMean = powerMean 2
+
+-- | @meanAbsDev n@ computes the mean absolute deviation in a sliding window of
+-- last @n@ elements in the stream.
+--
+-- The mean absolute deviation of the numbers \(x_1, x_2, \ldots, x_n\) is:
+--
+-- \(\frac{1}{n}\sum_{i=1}^n |x_i-\mu|\)
+--
+-- Note: It is expensive to compute MAD in a sliding window. We need to
+-- maintain a ring buffer of last n elements and maintain a running mean, when
+-- the result is extracted we need to compute the difference of all elements
+-- from the mean and get the average.
+--
+-- See https://en.wikipedia.org/wiki/Average_absolute_deviation .
+--
+-- /Unimplemented/
+meanAbsDev :: Int -> Fold m Double Double
+meanAbsDev = undefined
 
 -- | The variance \(\sigma^2\) of a population of \(n\) equally likely values
 -- is defined as the average of the squares of deviations from the mean
