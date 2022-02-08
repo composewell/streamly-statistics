@@ -15,10 +15,18 @@
 --
 -- Currently there is no overflow detection.
 --
--- Reference:
+-- References:
 --
 -- * https://en.wikipedia.org/wiki/Statistics
+-- * https://mathworld.wolfram.com/topics/ProbabilityandStatistics.html
 
+-- Resources:
+--
+-- This may be another useful resource for incremental (non-windowed)
+-- computation:
+--
+-- https://www.researchgate.net/publication/287152055_Incremental_Statistical_Measures
+--
 -- Sample Statistics
 --
 -- Terms
@@ -76,6 +84,7 @@ module Streamly.Statistics
     , noSlide
 
     -- * Summary Statistics
+    -- | See https://en.wikipedia.org/wiki/Summary_statistics .
 
     -- ** Sums
     , length
@@ -84,6 +93,9 @@ module Streamly.Statistics
     , powerSum
 
     -- ** Location
+    -- | See https://en.wikipedia.org/wiki/Location_parameter .
+    --
+    -- See https://en.wikipedia.org/wiki/Central_tendency .
     , min
     , max
     , rawMoment
@@ -101,29 +113,38 @@ module Streamly.Statistics
     , powerMean
     , powerMeanFrac
 
-    -- ** Exponential Smoothing
+    -- ** Weighted Means
+    -- | Exponential Smoothing.
     , ewma
     , ewmaAfterMean
     , ewmaRampUpSmoothing
 
     -- ** Spread
-    -- | Central moments are a statistical measure of dispersion.  The \(k\)th
-    -- moment about the mean (or \(k\)th central moment) is defined as:
+    -- | Second order central moment is a statistical measure of dispersion.
+    -- The \(k\)th moment about the mean (or \(k\)th central moment) is defined
+    -- as:
     --
     -- \(\mu_k = \frac{1}{n}\sum_{i=1}^n {(x_{i}-\mu)}^k\)
     --
     -- See https://mathworld.wolfram.com/CentralMoment.html .
+    --
     -- See https://en.wikipedia.org/wiki/Statistical_dispersion .
     , range
-
-    , meanAbsDev
+    , md
     , variance
     , stdDev
+
+    -- ** Shape
+    -- | Third and fourth order central moments are a measure of shape.
+    --
+    -- See https://en.wikipedia.org/wiki/Shape_parameter .
+    --
+    -- See https://en.wikipedia.org/wiki/Standardized_moment .
     , skewness
     , kurtosis
 
-    -- XXX Move to Statistics.Sample module?
-    -- ** Sampling
+    -- XXX Move to Statistics.Sample or Statistics.Estimation module?
+    -- ** Estimation
     , sampleVariance
     , sampleStdDev
     , stdErrMean
@@ -155,6 +176,8 @@ import Prelude hiding (length, sum, min, max)
 -- Utilities
 -------------------------------------------------------------------------------
 
+-- XXX Move these and basic functions to Fold.Sliding in streamly.
+--
 -- | Map a function on the incoming as well as outgoing element of a rolling
 -- window fold.
 --
@@ -172,6 +195,125 @@ lmap f = Fold.lmap (bimap f (f <$>))
 {-# INLINE noSlide #-}
 noSlide :: Fold m (a, Maybe a) b -> Fold m a b
 noSlide f = Fold.lmap (, Nothing) f
+
+-------------------------------------------------------------------------------
+-- Sum
+-------------------------------------------------------------------------------
+
+-- XXX Overflow.
+--
+-- | The sum of all the elements in a rolling window. The input elements are
+-- required to be intergal numbers.
+--
+-- This was written in the hope that it would be a tiny bit faster than 'sum'
+-- for 'Integral' values. But turns out that 'sum' is 2% faster than this even
+-- for intergal values!
+--
+-- /Internal/
+--
+{-# INLINE sumInt #-}
+sumInt :: forall m a. (Monad m, Integral a) => Fold m (a, Maybe a) a
+sumInt = Fold step initial extract
+
+    where
+
+    initial = return $ Partial (0 :: a)
+
+    step s (a, ma) =
+        return
+            $ Partial
+                $ case ma of
+                    Nothing -> s + a
+                    Just old -> s + a - old
+
+    extract = return
+
+-- XXX Overflow.
+--
+-- | Sum of all the elements in a rolling window:
+--
+-- \(S = \sum_{i=1}^n x_{i}\)
+--
+-- This is the first power sum.
+--
+-- >>> sum = powerSum 1
+--
+-- Uses Kahan-Babuska-Neumaier style summation for numerical stability of
+-- floating precision arithmetic.
+--
+-- /Space/: \(\mathcal{O}(1)\)
+--
+-- /Time/: \(\mathcal{O}(n)\)
+--
+{-# INLINE sum #-}
+sum :: forall m a. (Monad m, Num a) => Fold m (a, Maybe a) a
+sum = Fold step initial extract
+
+    where
+
+    initial =
+        return
+            $ Partial
+            $ Tuple'
+                (0 :: a) -- running sum
+                (0 :: a) -- accumulated rounding error
+
+    step (Tuple' total err) (new, mOld) =
+        let incr =
+                case mOld of
+                    -- XXX new may be large and err may be small we may lose it
+                    Nothing -> new - err
+                    -- XXX if (new - old) is large we may lose err
+                    Just old -> (new - old) - err
+            -- total is large and incr may be small, we may round incr here but
+            -- we will accumulate the rounding error in err1 in the next step.
+            total1 = total + incr
+            -- Accumulate any rounding error in err1
+            -- XXX In the Nothing case above we may lose err, therefore we
+            -- should use ((total1 - total) - new) + err here.
+            -- Or even in the just case if (new - old) is large we may lose
+            -- err, so we should use ((total1 - total) + (old - new)) + err.
+            err1 = (total1 - total) - incr
+        in return $ Partial $ Tuple' total1 err1
+
+    extract (Tuple' total _) = return total
+
+-- | The number of elements in the rolling window.
+--
+-- This is the \(0\)th power sum.
+--
+-- >>> length = powerSum 0
+--
+{-# INLINE length #-}
+length :: (Monad m, Num b) => Fold m (a, Maybe a) b
+length = Fold.foldl' step 0
+
+    where
+
+    step w (_, Nothing) = w + 1
+    step w _ = w
+
+-- | Sum of the \(k\)th power of all the elements in a rolling window:
+--
+-- \(S_k = \sum_{i=1}^n x_{i}^k\)
+--
+-- >>> powerSum k = lmap (^ k) sum
+--
+-- /Space/: \(\mathcal{O}(1)\)
+--
+-- /Time/: \(\mathcal{O}(n)\)
+{-# INLINE powerSum #-}
+powerSum :: (Monad m, Num a) => Int -> Fold m (a, Maybe a) a
+powerSum k = lmap (^ k) sum
+
+-- | Like 'powerSum' but powers can be negative or fractional. This is slower
+-- than 'powerSum' for positive intergal powers.
+--
+-- >>> powerSumFrac p = lmap (** p) sum
+--
+{-# INLINE powerSumFrac #-}
+powerSumFrac :: (Monad m, Floating a) => a -> Fold m (a, Maybe a) a
+powerSumFrac p = lmap (** p) sum
 
 -------------------------------------------------------------------------------
 -- Location
@@ -283,114 +425,6 @@ max = Fold step initial extract
             $ fromMaybe (0, error "max: Empty stream")
             $ DQ.head q
 
--- | The difference between the max and min elements of a rolling window.
---
--- >>> range = Fold.teeWith (-) max min
---
--- If you want to compute the range of the entire stream @Fold.teeWith (-)
--- Fold.max Fold.min@  from the streamly package would be much faster.
---
--- /Space/: \(\mathcal{O}(n)\) where @n@ is the window size.
---
--- /Time/: \(\mathcal{O}(n*w)\) where \(w\) is the window size.
---
-{-# INLINE range #-}
-range :: (Monad m, Num a, Ord a) => Fold m (a, Maybe a) a
-range = Fold.teeWith (-) max min
-
--- XXX Overflow.
---
--- | The sum of all the elements in a rolling window. The input elements are
--- required to be intergal numbers.
---
--- This was written in the hope that it would be a tiny bit faster than 'sum'
--- for 'Integral' values. But turns out that 'sum' is 2% faster than this even
--- for intergal values!
---
--- /Internal/
---
-{-# INLINE sumInt #-}
-sumInt :: forall m a. (Monad m, Integral a) => Fold m (a, Maybe a) a
-sumInt = Fold step initial extract
-
-    where
-
-    initial = return $ Partial (0 :: a)
-
-    step s (a, ma) =
-        return
-            $ Partial
-                $ case ma of
-                    Nothing -> s + a
-                    Just old -> s + a - old
-
-    extract = return
-
--- XXX Overflow.
---
--- | Sum of all the elements in a rolling window:
---
--- \(S = \sum_{i=1}^n x_{i}\)
---
--- This is the first power sum.
---
--- >>> sum = powerSum 1
---
--- Uses Kahan-Babuska-Neumaier style summation for numerical stability of
--- floating precision arithmetic.
---
--- /Space/: \(\mathcal{O}(1)\)
---
--- /Time/: \(\mathcal{O}(n)\)
---
-{-# INLINE sum #-}
-sum :: forall m a. (Monad m, Num a) => Fold m (a, Maybe a) a
-sum = Fold step initial extract
-
-    where
-
-    initial =
-        return
-            $ Partial
-            $ Tuple'
-                (0 :: a) -- running sum
-                (0 :: a) -- accumulated rounding error
-
-    step (Tuple' total err) (new, mOld) =
-        let incr =
-                case mOld of
-                    -- XXX new may be large and err may be small we may lose it
-                    Nothing -> new - err
-                    -- XXX if (new - old) is large we may lose err
-                    Just old -> (new - old) - err
-            -- total is large and incr may be small, we may round incr here but
-            -- we will accumulate the rounding error in err1 in the next step.
-            total1 = total + incr
-            -- Accumulate any rounding error in err1
-            -- XXX In the Nothing case above we may lose err, therefore we
-            -- should use ((total1 - total) - new) + err here.
-            -- Or even in the just case if (new - old) is large we may lose
-            -- err, so we should use ((total1 - total) + (old - new)) + err.
-            err1 = (total1 - total) - incr
-        in return $ Partial $ Tuple' total1 err1
-
-    extract (Tuple' total _) = return total
-
--- | The number of elements in the rolling window.
---
--- This is the \(0\)th power sum.
---
--- >>> length = powerSum 0
---
-{-# INLINE length #-}
-length :: (Monad m, Num b) => Fold m (a, Maybe a) b
-length = Fold.foldl' step 0
-
-    where
-
-    step w (_, Nothing) = w + 1
-    step w _ = w
-
 -- | Arithmetic mean of elements in a sliding window:
 --
 -- \(\mu = \frac{\sum_{i=1}^n x_{i}}{n}\)
@@ -414,27 +448,44 @@ length = Fold.foldl' step 0
 mean :: forall m a. (Monad m, Fractional a) => Fold m (a, Maybe a) a
 mean = Fold.teeWith (/) sum length
 
--- | Sum of the \(k\)th power of all the elements in a rolling window:
+-- | Same as 'mean' but uses Welford's algorithm to compute the mean
+-- incrementally.
 --
--- \(S_k = \sum_{i=1}^n x_{i}^k\)
+-- It maintains a running mean instead of a running sum and adjusts the mean
+-- based on a new value.  This is slower than 'mean' because of using the
+-- division operation on each step and it is numerically unstable (as of now).
+-- The advantage over 'mean' could be no overflow if the numbers are large,
+-- because we do not maintain a sum, but that is a highly unlikely corner case.
 --
--- >>> powerSum k = lmap (^ k) sum
---
--- /Space/: \(\mathcal{O}(1)\)
---
--- /Time/: \(\mathcal{O}(n)\)
-{-# INLINE powerSum #-}
-powerSum :: (Monad m, Num a) => Int -> Fold m (a, Maybe a) a
-powerSum k = lmap (^ k) sum
+-- /Internal/
+{-# INLINE welfordMean #-}
+welfordMean :: forall m a. (Monad m, Fractional a) => Fold m (a, Maybe a) a
+welfordMean = Fold step initial extract
 
--- | Like 'powerSum' but powers can be negative or fractional. This is slower
--- than 'powerSum' for positive intergal powers.
---
--- >>> powerSumFrac p = lmap (** p) sum
---
-{-# INLINE powerSumFrac #-}
-powerSumFrac :: (Monad m, Floating a) => a -> Fold m (a, Maybe a) a
-powerSumFrac p = lmap (** p) sum
+    where
+
+    initial =
+        return
+            $ Partial
+            $ Tuple'
+                (0 :: a)   -- running mean
+                (0 :: Int) -- count of numbers in the window
+
+    step (Tuple' x w) (y, my) =
+        return
+            $ Partial
+            $ case my of
+                Nothing ->
+                    let w1 = fromIntegral (w + 1)
+                     in Tuple' (x + (y - x) / w1) (w + 1)
+                Just old ->
+                    let w1 = fromIntegral w
+                    -- XXX can we use x + (y - old) / w1 ?
+                    -- XXX We can carry the rounding errors to provide
+                    -- numerical stability like in 'mean'.
+                     in Tuple' (x + (y - x) / w1 + (x - old) / w1) w
+
+    extract (Tuple' x _) = return x
 
 -- XXX We may have chances of overflow if the powers are high or the numbers
 -- are large. A limited mitigation could be to use welford style avg
@@ -511,203 +562,6 @@ powerMeanFrac k = (** (1 / k)) <$> rawMomentFrac k
 harmonicMean :: (Monad m, Fractional a) => Fold m (a, Maybe a) a
 harmonicMean = Fold.teeWith (/) length (lmap recip sum)
 
--- | The quadratic mean or root mean square (rms) of the numbers
--- \(x_1, x_2, \ldots, x_n\) is defined as:
---
--- \(RMS = \sqrt{ \frac{1}{n} \left( x_1^2 + x_2^2 + \cdots + x_n^2 \right) }.\)
---
--- >>> quadraticMean = powerMean 2
---
--- See https://en.wikipedia.org/wiki/Root_mean_square .
---
-{-# INLINE quadraticMean #-}
-quadraticMean :: (Monad m, Floating a) => Fold m (a, Maybe a) a
-quadraticMean = powerMean 2
-
--- | @meanAbsDev n@ computes the mean absolute deviation in a sliding window of
--- last @n@ elements in the stream.
---
--- The mean absolute deviation of the numbers \(x_1, x_2, \ldots, x_n\) is:
---
--- \(\frac{1}{n}\sum_{i=1}^n |x_i-\mu|\)
---
--- Note: It is expensive to compute MAD in a sliding window. We need to
--- maintain a ring buffer of last n elements and maintain a running mean, when
--- the result is extracted we need to compute the difference of all elements
--- from the mean and get the average.
---
--- See https://en.wikipedia.org/wiki/Average_absolute_deviation .
---
--- /Unimplemented/
-meanAbsDev :: Int -> Fold m Double Double
-meanAbsDev = undefined
-
--- | The variance \(\sigma^2\) of a population of \(n\) equally likely values
--- is defined as the average of the squares of deviations from the mean
--- \(\mu\). In other words, second moment about the mean:
---
--- \(\sigma^2 = \frac{1}{n}\sum_{i=1}^n {(x_{i}-\mu)}^2\)
---
--- \(\sigma^2 = rawMoment(2) - \mu^2\)
---
--- \(\mu_2 = -\mu\'_1^2 + \mu'_2\)
---
--- Note that the variance would be biased if applied to estimate the population
--- variance from a sample of the population. See 'sampleVariance'.
---
--- See https://en.wikipedia.org/wiki/Variance.
---
--- /Space/: \(\mathcal{O}(1)\)
---
--- /Time/: \(\mathcal{O}(n)\)
-{-# INLINE variance #-}
-variance :: (Monad m, Fractional a) => Fold m (a, Maybe a) a
-variance = Fold.teeWith (\p2 m -> p2 - m ^ (2 :: Int)) (rawMoment 2) mean
-
--- | Unbiased sample variance i.e. the variance of a sample corrected to
--- better estimate the variance of the population, defined as:
---
--- \(s^2 = \frac{1}{n - 1}\sum_{i=1}^n {(x_{i}-\mu)}^2\)
---
--- \(s^2 = \frac{n}{n - 1} \times \sigma^2\).
---
--- See https://en.wikipedia.org/wiki/Bessel%27s_correction.
---
-{-# INLINE sampleVariance #-}
-sampleVariance :: (Monad m, Fractional a) => Fold m (a, Maybe a) a
-sampleVariance = Fold.teeWith (\n s2 -> n * s2 / (n - 1)) length variance
-
--- | Standard deviation \(\sigma\) is the square root of 'variance'.
---
--- This is the population standard deviation or uncorrected sample standard
--- deviation.
---
--- >>> stdDev = sqrt <$> variance
---
--- See https://en.wikipedia.org/wiki/Standard_deviation .
---
--- /Space/: \(\mathcal{O}(1)\)
---
--- /Time/: \(\mathcal{O}(n)\)
-{-# INLINE stdDev #-}
-stdDev :: (Monad m, Floating a) => Fold m (a, Maybe a) a
-stdDev = sqrt <$> variance
-
--- | Sample standard deviation:
---
--- \(s = \sqrt{sampleVariance}\)
---
--- >>> sampleStdDev = sqrt <$> sampleVariance
---
--- See https://en.wikipedia.org/wiki/Unbiased_estimation_of_standard_deviation
--- .
---
-{-# INLINE sampleStdDev #-}
-sampleStdDev :: (Monad m, Floating a) => Fold m (a, Maybe a) a
-sampleStdDev = sqrt <$> sampleVariance
-
--- | Standard error of the sample mean (SEM), defined as:
---
--- \( SEM = \frac{sampleStdDev}{\sqrt{n}} \)
---
--- See https://en.wikipedia.org/wiki/Standard_error .
---
--- /Space/: \(\mathcal{O}(1)\)
---
--- /Time/: \(\mathcal{O}(n)\)
-{-# INLINE stdErrMean #-}
-stdErrMean :: (Monad m, Floating a) => Fold m (a, Maybe a) a
-stdErrMean = Fold.teeWith (\sd n -> sd / sqrt n) sampleStdDev length
-
--- | Skewness \(\gamma\) is the standardized third central moment. The third
--- central moment can be computed in terms of raw moments:
---
--- \(\mu_3 = 2\mu\'_1^3 - 3\mu'_1\mu'_2 + \mu'_3\)
---
--- It is 0 for a symmetric distribution, negative for a distribution that is
--- skewed towards left, positive for a distribution skewed towards right.
---
--- For a normal like distribution the median can be found around
--- \(\mu - \frac{\gamma\sigma}{6}\) and the mode can be found around
--- \(\mu - \frac{\gamma \sigma}{2}\).
---
--- See https://en.wikipedia.org/wiki/Skewness .
---
-{-# INLINE skewness #-}
-skewness :: (Monad m, Floating a) => Fold m (a, Maybe a) a
-skewness =
-    toFold $ (\p3 sd m -> p3 / sd ^ (3 :: Int) - 3 * (m / sd)
-                - (m / sd) ^ (3 :: Int))
-    <$> Tee (rawMoment 3)
-    <*> Tee stdDev
-    <*> Tee mean
-
--- XXX We can compute the 2nd, 3rd, 4th raw moments by repeatedly multiplying
--- instead of computing the powers every time.
---
--- | Kurtosis \(\kappa\) is the standardized fourth central moment. The fourth
--- central moment can be computed in terms of raw moments:
---
--- \(\mu_4 = -3\mu\'_1^4 + 6\mu\'_1^2\mu'_2 - 4\mu'_1\mu'_3\ + \mu'_4\)
---
--- It is always non-negative. It is 0 for a point distribution, low for light
--- tailed (platykurtic) distributions and high for heavy tailed (leptokurtic)
--- distributions.
---
--- For a normal distribution \(\kappa = 3\sigma^4\).
---
--- See https://en.wikipedia.org/wiki/Kurtosis .
-{-# INLINE kurtosis #-}
-kurtosis :: (Monad m, Floating a) => Fold m (a, Maybe a) a
-kurtosis =
-    toFold $
-    (\p4 p3 sd m ->
-        p4 / sd ^ (4 :: Int) - 4 * ((m / sd) * (p3 / sd ^ (3 :: Int))) -
-            3 * ((m / sd) ^ (4 :: Int)))
-    <$> Tee (rawMoment 4)
-    <*> Tee (rawMoment 3)
-    <*> Tee stdDev
-    <*> Tee mean
-
--- | Same as 'mean' but uses Welford's algorithm to compute the mean
--- incrementally.
---
--- It maintains a running mean instead of a running sum and adjusts the mean
--- based on a new value.  This is slower than 'mean' because of using the
--- division operation on each step and it is numerically unstable. The
--- advantage over 'mean' could be no overflow if the numbers are large, because
--- we do not maintain a sum, but that is a highly unlikely corner case.
---
--- /Internal/
-{-# INLINE welfordMean #-}
-welfordMean :: forall m a. (Monad m, Fractional a) => Fold m (a, Maybe a) a
-welfordMean = Fold step initial extract
-
-    where
-
-    initial =
-        return
-            $ Partial
-            $ Tuple'
-                (0 :: a)   -- running mean
-                (0 :: Int) -- count of numbers in the window
-
-    step (Tuple' x w) (y, my) =
-        return
-            $ Partial
-            $ case my of
-                Nothing ->
-                    let w1 = fromIntegral (w + 1)
-                     in Tuple' (x + (y - x) / w1) (w + 1)
-                Just old ->
-                    let w1 = fromIntegral w
-                    -- XXX can we use x + (y - old) / w1 ?
-                    -- XXX We can carry the rounding errors to provide
-                    -- numerical stability like in 'mean'.
-                     in Tuple' (x + (y - x) / w1 + (x - old) / w1) w
-
-    extract (Tuple' x _) = return x
-
 -- | Geometric mean, defined as:
 --
 -- \(GM = \sqrt[n]{x_1 x_2 \cdots x_n}\)
@@ -724,6 +578,23 @@ welfordMean = Fold step initial extract
 {-# INLINE geometricMean #-}
 geometricMean :: (Monad m, Floating a) => Fold m (a, Maybe a) a
 geometricMean = exp <$> lmap log mean
+
+-- | The quadratic mean or root mean square (rms) of the numbers
+-- \(x_1, x_2, \ldots, x_n\) is defined as:
+--
+-- \(RMS = \sqrt{ \frac{1}{n} \left( x_1^2 + x_2^2 + \cdots + x_n^2 \right) }.\)
+--
+-- >>> quadraticMean = powerMean 2
+--
+-- See https://en.wikipedia.org/wiki/Root_mean_square .
+--
+{-# INLINE quadraticMean #-}
+quadraticMean :: (Monad m, Floating a) => Fold m (a, Maybe a) a
+quadraticMean = powerMean 2
+
+-------------------------------------------------------------------------------
+-- Weighted Means
+-------------------------------------------------------------------------------
 
 -- XXX Is this numerically stable? We can use the kbn summation here.
 -- | ewmaStep smoothing-factor old-value new-value
@@ -799,3 +670,195 @@ ewmaRampUpSmoothing n k1 = extract <$> Fold.foldl' step initial
         in Tuple' x k
 
     extract (Tuple' x _) = x
+
+-------------------------------------------------------------------------------
+-- Spread/Dispersion
+-------------------------------------------------------------------------------
+
+-- | The difference between the max and min elements of a rolling window.
+--
+-- >>> range = Fold.teeWith (-) max min
+--
+-- If you want to compute the range of the entire stream @Fold.teeWith (-)
+-- Fold.max Fold.min@  from the streamly package would be much faster.
+--
+-- /Space/: \(\mathcal{O}(n)\) where @n@ is the window size.
+--
+-- /Time/: \(\mathcal{O}(n*w)\) where \(w\) is the window size.
+--
+{-# INLINE range #-}
+range :: (Monad m, Num a, Ord a) => Fold m (a, Maybe a) a
+range = Fold.teeWith (-) max min
+
+-- | @md n@ computes the mean absolute deviation (or mean deviation) in a
+-- sliding window of last @n@ elements in the stream.
+--
+-- The mean absolute deviation of the numbers \(x_1, x_2, \ldots, x_n\) is:
+--
+-- \(MD = \frac{1}{n}\sum_{i=1}^n |x_i-\mu|\)
+--
+-- Note: It is expensive to compute MD in a sliding window. We need to
+-- maintain a ring buffer of last n elements and maintain a running mean, when
+-- the result is extracted we need to compute the difference of all elements
+-- from the mean and get the average. Using standard deviation may be
+-- computationally cheaper.
+--
+-- See https://en.wikipedia.org/wiki/Average_absolute_deviation .
+--
+-- /Unimplemented/
+md :: Int -> Fold m Double Double
+md = undefined
+
+-- | The variance \(\sigma^2\) of a population of \(n\) equally likely values
+-- is defined as the average of the squares of deviations from the mean
+-- \(\mu\). In other words, second moment about the mean:
+--
+-- \(\sigma^2 = \frac{1}{n}\sum_{i=1}^n {(x_{i}-\mu)}^2\)
+--
+-- \(\sigma^2 = rawMoment(2) - \mu^2\)
+--
+-- \(\mu_2 = -(\mu'_1)^2 + \mu'_2\)
+--
+-- Note that the variance would be biased if applied to estimate the population
+-- variance from a sample of the population. See 'sampleVariance'.
+--
+-- See https://en.wikipedia.org/wiki/Variance.
+--
+-- /Space/: \(\mathcal{O}(1)\)
+--
+-- /Time/: \(\mathcal{O}(n)\)
+{-# INLINE variance #-}
+variance :: (Monad m, Fractional a) => Fold m (a, Maybe a) a
+variance = Fold.teeWith (\p2 m -> p2 - m ^ (2 :: Int)) (rawMoment 2) mean
+
+-- | Standard deviation \(\sigma\) is the square root of 'variance'.
+--
+-- This is the population standard deviation or uncorrected sample standard
+-- deviation.
+--
+-- >>> stdDev = sqrt <$> variance
+--
+-- See https://en.wikipedia.org/wiki/Standard_deviation .
+--
+-- /Space/: \(\mathcal{O}(1)\)
+--
+-- /Time/: \(\mathcal{O}(n)\)
+{-# INLINE stdDev #-}
+stdDev :: (Monad m, Floating a) => Fold m (a, Maybe a) a
+stdDev = sqrt <$> variance
+
+-- | Skewness \(\gamma\) is the standardized third central moment defined as:
+--
+-- \(\tilde{\mu}_3 = \frac{\mu_3}{\sigma^3}\)
+--
+-- The third central moment can be computed in terms of raw moments:
+--
+-- \(\mu_3 = 2(\mu'_1)^3 - 3\mu'_1\mu'_2 + \mu'_3\)
+--
+-- Substituting \(\mu'_1 = \mu\), and \(\mu'_2 = \mu^2 + \sigma^2\):
+--
+-- \(\mu_3 = -\mu^3 - 3\mu\sigma^2 + \mu'_3\)
+--
+-- Skewness is a measure of symmetry of the probability distribution. It is 0
+-- for a symmetric distribution, negative for a distribution that is skewed
+-- towards left, positive for a distribution skewed towards right.
+--
+-- For a normal like distribution the median can be found around
+-- \(\mu - \frac{\gamma\sigma}{6}\) and the mode can be found around
+-- \(\mu - \frac{\gamma \sigma}{2}\).
+--
+-- See https://en.wikipedia.org/wiki/Skewness .
+--
+{-# INLINE skewness #-}
+skewness :: (Monad m, Floating a) => Fold m (a, Maybe a) a
+skewness =
+    toFold
+        $ (\rm3 sd mu ->
+            rm3 / sd ^ (3 :: Int) - 3 * (mu / sd) - (mu / sd) ^ (3 :: Int)
+          )
+        <$> Tee (rawMoment 3)
+        <*> Tee stdDev
+        <*> Tee mean
+
+-- XXX We can compute the 2nd, 3rd, 4th raw moments by repeatedly multiplying
+-- instead of computing the powers every time.
+--
+-- | Kurtosis \(\kappa\) is the standardized fourth central moment, defined as:
+--
+-- \(\tilde{\mu}_4 = \frac{\mu_4}{\sigma^4}\)
+--
+-- The fourth central moment can be computed in terms of raw moments:
+--
+-- \(\mu_4 = -3(\mu'_1)^4 + 6(\mu'_1)^2\mu'_2 - 4\mu'_1\mu'_3\ + \mu'_4\)
+--
+-- Substituting \(\mu'_1 = \mu\), and \(\mu'_2 = \mu^2 + \sigma^2\):
+--
+-- \(\mu_4 = 3\mu^4 + 6\mu^2\sigma^2 - 4\mu\mu'_3 + \mu'_4\)
+--
+-- It is always non-negative. It is 0 for a point distribution, low for light
+-- tailed (platykurtic) distributions and high for heavy tailed (leptokurtic)
+-- distributions.
+--
+-- \(\kappa >= \gamma^2 + 1\)
+--
+-- For a normal distribution \(\kappa = 3\sigma^4\).
+--
+-- See https://en.wikipedia.org/wiki/Kurtosis .
+--
+-- /Broken/
+{-# INLINE kurtosis #-}
+kurtosis :: (Monad m, Floating a) => Fold m (a, Maybe a) a
+kurtosis =
+    toFold
+        $ (\rm4 rm3 sd mu ->
+              rm4 / sd ^ (4 :: Int)
+            - 4 * ((mu / sd) * (rm3 / sd ^ (3 :: Int)))
+            - 3 * ((mu / sd) ^ (4 :: Int))
+          )
+        <$> Tee (rawMoment 4)
+        <*> Tee (rawMoment 3)
+        <*> Tee stdDev
+        <*> Tee mean
+
+-------------------------------------------------------------------------------
+-- Estimation
+-------------------------------------------------------------------------------
+
+-- | Unbiased sample variance i.e. the variance of a sample corrected to
+-- better estimate the variance of the population, defined as:
+--
+-- \(s^2 = \frac{1}{n - 1}\sum_{i=1}^n {(x_{i}-\mu)}^2\)
+--
+-- \(s^2 = \frac{n}{n - 1} \times \sigma^2\).
+--
+-- See https://en.wikipedia.org/wiki/Bessel%27s_correction.
+--
+{-# INLINE sampleVariance #-}
+sampleVariance :: (Monad m, Fractional a) => Fold m (a, Maybe a) a
+sampleVariance = Fold.teeWith (\n s2 -> n * s2 / (n - 1)) length variance
+
+-- | Sample standard deviation:
+--
+-- \(s = \sqrt{sampleVariance}\)
+--
+-- >>> sampleStdDev = sqrt <$> sampleVariance
+--
+-- See https://en.wikipedia.org/wiki/Unbiased_estimation_of_standard_deviation
+-- .
+--
+{-# INLINE sampleStdDev #-}
+sampleStdDev :: (Monad m, Floating a) => Fold m (a, Maybe a) a
+sampleStdDev = sqrt <$> sampleVariance
+
+-- | Standard error of the sample mean (SEM), defined as:
+--
+-- \( SEM = \frac{sampleStdDev}{\sqrt{n}} \)
+--
+-- See https://en.wikipedia.org/wiki/Standard_error .
+--
+-- /Space/: \(\mathcal{O}(1)\)
+--
+-- /Time/: \(\mathcal{O}(n)\)
+{-# INLINE stdErrMean #-}
+stdErrMean :: (Monad m, Floating a) => Fold m (a, Maybe a) a
+stdErrMean = Fold.teeWith (\sd n -> sd / sqrt n) sampleStdDev length
