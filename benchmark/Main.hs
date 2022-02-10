@@ -246,5 +246,14 @@ main =
             numElements
             "welfordMean (window size 1000)"
             (Ring.slidingWindow 1000 Statistics.welfordMean)
+        , benchWithPostscan
+            numElements
+            "md (window size 100)"
+            (Statistics.md 100)
+        , benchWithPostscan
+            numElements
+            "md (window size 1000)"
+            (Statistics.md 1000)
+
         ]
     ]
