@@ -578,23 +578,6 @@ powerMeanFrac k = (** (1 / k)) <$> rawMomentFrac k
 harmonicMean :: (Monad m, Fractional a) => Fold m (a, Maybe a) a
 harmonicMean = Fold.teeWith (/) length (lmap recip sum)
 
--- | Geometric mean, defined as:
---
--- \(GM = \sqrt[n]{x_1 x_2 \cdots x_n}\)
---
--- \(GM = \left(\prod_{i=1}^n x_i\right)^\frac{1}{n}\)
---
--- or, equivalently, as the arithmetic mean in log space:
---
--- \(GM = e ^{{\frac{\sum_{i=1}^{n}\ln a_i}{n}}}\)
---
--- >>> geometricMean = exp <$> lmap log mean
---
--- See https://en.wikipedia.org/wiki/Geometric_mean .
-{-# INLINE geometricMean #-}
-geometricMean :: (Monad m, Floating a) => Fold m (a, Maybe a) a
-geometricMean = exp <$> lmap log mean
-
 -- | The quadratic mean or root mean square (rms) of the numbers
 -- \(x_1, x_2, \ldots, x_n\) is defined as:
 --
@@ -611,12 +594,6 @@ quadraticMean = powerMean 2
 -------------------------------------------------------------------------------
 -- Weighted Means
 -------------------------------------------------------------------------------
-
--- XXX Is this numerically stable? We can use the kbn summation here.
--- | ewmaStep smoothing-factor old-value new-value
-{-# INLINE ewmaStep #-}
-ewmaStep :: Double -> Double -> Double -> Double
-ewmaStep k x0 x1 = (1 - k) * x0 + k * x1
 
 -- XXX Compute this in a sliding window?
 --
@@ -840,19 +817,22 @@ kurtosis =
 -- Estimation
 -------------------------------------------------------------------------------
 
--- | Unbiased sample variance i.e. the variance of a sample corrected to
--- better estimate the variance of the population, defined as:
+-- | Geometric mean, defined as:
 --
--- \(s^2 = \frac{1}{n - 1}\sum_{i=1}^n {(x_{i}-\mu)}^2\)
+-- \(GM = \sqrt[n]{x_1 x_2 \cdots x_n}\)
 --
--- \(s^2 = \frac{n}{n - 1} \times \sigma^2\).
+-- \(GM = \left(\prod_{i=1}^n x_i\right)^\frac{1}{n}\)
 --
--- See https://en.wikipedia.org/wiki/Bessel%27s_correction.
+-- or, equivalently, as the arithmetic mean in log space:
+--
+-- \(GM = e ^{{\frac{\sum_{i=1}^{n}\ln a_i}{n}}}\)
+--
+-- >>> geometricMean = exp <$> lmap log mean
 --
 -- See https://en.wikipedia.org/wiki/Geometric_mean .
 {-# INLINE geometricMean #-}
-geometricMean :: forall m a. (Monad m, Floating a) => Fold m (a, Maybe a) a
-geometricMean = exp <$> Fold.lmap (bimap log (log <$>)) mean
+geometricMean :: (Monad m, Floating a) => Fold m (a, Maybe a) a
+geometricMean = exp <$> lmap log mean
 
 -- | @weightedMean@ computes the weighted mean of the sample data.
 --
@@ -868,6 +848,7 @@ weightedMean n = Fold.lmap (uncurry (*)) (slidingWindow n sum)
 {-# INLINE ewmaStep #-}
 ewmaStep :: Double -> Double -> Double -> Double
 ewmaStep k x0 x1 = (1 - k) * x0 + k * x1
+
 {-# INLINE sampleVariance #-}
 sampleVariance :: (Monad m, Fractional a) => Fold m (a, Maybe a) a
 sampleVariance = Fold.teeWith (\n s2 -> n * s2 / (n - 1)) length variance
