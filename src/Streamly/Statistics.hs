@@ -148,6 +148,7 @@ module Streamly.Statistics
     , sampleVariance
     , sampleStdDev
     , stdErrMean
+    , bubbleAsc
     )
 where
 
@@ -158,11 +159,16 @@ import Streamly.Data.Fold.Tee(Tee(..), toFold)
 import Streamly.Internal.Data.Fold.Type (Fold(..), Step(..))
 import Streamly.Internal.Data.Tuple.Strict (Tuple'(..), Tuple3'(..))
 
+
 import qualified Deque.Strict as DQ
 import qualified Streamly.Data.Fold as Fold
+import qualified Streamly.Internal.Data.Array.Prim.Mut.Type as Array
 
 import Prelude hiding (length, sum, min, max)
 
+import Control.Monad.IO.Class
+import Control.Monad (when)
+import Streamly.Internal.Data.IORef.Prim
 -- TODO: Overflow checks. Would be good if we can directly replace the
 -- operations with overflow checked operations.
 --
@@ -194,7 +200,7 @@ lmap f = Fold.lmap (bimap f (f <$>))
 --
 {-# INLINE noSlide #-}
 noSlide :: Fold m (a, Maybe a) b -> Fold m a b
-noSlide f = Fold.lmap (, Nothing) f
+noSlide = Fold.lmap (, Nothing)
 
 -------------------------------------------------------------------------------
 -- Sum
@@ -649,7 +655,7 @@ ewma k = extract <$> Fold.foldl' step (Tuple' 0 1)
 {-# INLINE ewmaAfterMean #-}
 ewmaAfterMean :: Monad m => Int -> Double -> Fold m Double Double
 ewmaAfterMean n k =
-    Fold.concatMap (\i -> (Fold.foldl' (ewmaStep k) i)) (Fold.take n Fold.mean)
+    Fold.concatMap (Fold.foldl' (ewmaStep k))  (Fold.take n Fold.mean)
 
 -- | @ewma n k@ is like 'ewma' but uses 1 as the initial smoothing factor and
 -- then exponentially smooths it to @k@ using @n@ as the smoothing factor.
@@ -862,3 +868,21 @@ sampleStdDev = sqrt <$> sampleVariance
 {-# INLINE stdErrMean #-}
 stdErrMean :: (Monad m, Floating a) => Fold m (a, Maybe a) a
 stdErrMean = Fold.teeWith (\sd n -> sd / sqrt n) sampleStdDev length
+
+bubbleAsc :: (MonadIO m, Prim a) =>
+    Int -> (a -> a -> Ordering) -> Array.Array a -> m ()
+bubbleAsc idx cmp arr = do
+    l <- Array.length arr
+    go idx l
+
+    where
+    go i l =
+        when ((i + 1) < l) $ do
+        x1 <- Array.unsafeReadIndex arr i
+        x2 <- Array.unsafeReadIndex arr (i + 1)
+        case x1 `cmp` x2 of
+            GT -> do
+                _ <- Array.unsafeWriteIndex arr (i + 1) x2
+                _ <- Array.unsafeWriteIndex arr i x1
+                go (i + 1) l
+            _ -> go (i + 1) l
