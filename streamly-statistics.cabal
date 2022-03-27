@@ -11,8 +11,8 @@ license:             Apache-2.0
 license-file:        LICENSE
 tested-with:
       GHC==8.10.7
-    , GHC==9.0.1
-    , GHC==9.2.1
+    , GHC==9.0.2
+    , GHC==9.2.2
 author: Composewell Technologies
 maintainer: streamly@composewell.com
 copyright: 2019 Composewell Technologies
