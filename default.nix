@@ -41,10 +41,15 @@ let haskellPackages =
 
                     streamly =
                       nixpkgs.haskell.lib.overrideCabal
-                        (let src = fetchGit {
-                            url = "git@github.com:composewell/streamly.git";
-                            rev = "8df3dc4c70f3f4a2daa3b5cada7390e0c44e8394";
-                        }; in super.callCabal2nix "streamly" src {})
+                        (super.callHackageDirect
+                          { pkg = "streamly";
+                            ver = "0.8.2";
+                            sha256 = "sha256-CjFq9SCdbgLZa7NqOE4OtC8OaFg4vK8VmIDjGU5rGko=";
+                          } {})
+                        #(let src = fetchGit {
+                        #    url = "git@github.com:composewell/streamly.git";
+                        #    rev = "8df3dc4c70f3f4a2daa3b5cada7390e0c44e8394";
+                        #}; in super.callCabal2nix "streamly" src {})
                         (old:
                           { librarySystemDepends =
                               if builtins.currentSystem == "x86_64-darwin"
@@ -57,8 +62,8 @@ let haskellPackages =
                     unicode-data =
                       super.callHackageDirect
                         { pkg = "unicode-data";
-                          ver = "0.2.0";
-                          sha256 = "14crb68g79yyw87fgh49z2fn4glqx0zr53v6mapihaxzkikhkkc3";
+                          ver = "0.3.0";
+                          sha256 = "sha256-3R8ZmLoN/oWU0Mr/V4o/90NqiWaE8fprVULgh8/s/Uc=";
                         } {};
 
                     tasty-bench =
