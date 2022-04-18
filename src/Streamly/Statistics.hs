@@ -80,24 +80,24 @@ module Streamly.Statistics
     -- window folds by keeping the second element of the input tuple as
     -- @Nothing@.
     --
-      lmap
-    , noSlide
+      Window.lmap
+    , Window.cumulative
 
     -- * Summary Statistics
     -- | See https://en.wikipedia.org/wiki/Summary_statistics .
 
     -- ** Sums
-    , length
-    , sum
-    , sumInt
-    , powerSum
+    , Window.length
+    , Window.sum
+    , Window.sumInt
+    , Window.powerSum
 
     -- ** Location
     -- | See https://en.wikipedia.org/wiki/Location_parameter .
     --
     -- See https://en.wikipedia.org/wiki/Central_tendency .
-    , min
-    , max
+    , Window.minimum
+    , Window.maximum
     , rawMoment
     , rawMomentFrac
 
@@ -129,7 +129,7 @@ module Streamly.Statistics
     -- See https://mathworld.wolfram.com/CentralMoment.html .
     --
     -- See https://en.wikipedia.org/wiki/Statistical_dispersion .
-    , range
+    , Window.range
     , md
     , variance
     , stdDev
@@ -151,17 +151,14 @@ module Streamly.Statistics
     )
 where
 
-import Data.Bifunctor(bimap)
-import Data.Function ((&))
-import Data.Maybe (fromMaybe)
 import Streamly.Data.Fold.Tee(Tee(..), toFold)
 import Streamly.Internal.Data.Fold.Type (Fold(..), Step(..))
-import Streamly.Internal.Data.Tuple.Strict (Tuple'(..), Tuple3'(..))
+import Streamly.Internal.Data.Tuple.Strict (Tuple'(..))
 
-import qualified Deque.Strict as DQ
 import qualified Streamly.Data.Fold as Fold
+import qualified Streamly.Internal.Data.Fold.Window as Window
 
-import Prelude hiding (length, sum, min, max)
+import Prelude hiding (length, sum, minimum, maximum)
 
 -- TODO: Overflow checks. Would be good if we can directly replace the
 -- operations with overflow checked operations.
@@ -175,255 +172,6 @@ import Prelude hiding (length, sum, min, max)
 -------------------------------------------------------------------------------
 -- Utilities
 -------------------------------------------------------------------------------
-
--- XXX Move these and basic functions to Fold.Sliding in streamly.
---
--- | Map a function on the incoming as well as outgoing element of a rolling
--- window fold.
---
--- >>> lmap f = Fold.lmap (bimap f (f <$>))
---
-{-# INLINE lmap #-}
-lmap :: (c -> a) -> Fold m (a, Maybe a) b -> Fold m (c, Maybe c) b
-lmap f = Fold.lmap (bimap f (f <$>))
-
--- | Convert a rolling fold to a normal fold using the entire input stream as a
--- single window.
---
--- >>> noSlide f = Fold.lmap (, Nothing) f
---
-{-# INLINE noSlide #-}
-noSlide :: Fold m (a, Maybe a) b -> Fold m a b
-noSlide f = Fold.lmap (, Nothing) f
-
--------------------------------------------------------------------------------
--- Sum
--------------------------------------------------------------------------------
-
--- XXX Overflow.
---
--- | The sum of all the elements in a rolling window. The input elements are
--- required to be intergal numbers.
---
--- This was written in the hope that it would be a tiny bit faster than 'sum'
--- for 'Integral' values. But turns out that 'sum' is 2% faster than this even
--- for intergal values!
---
--- /Internal/
---
-{-# INLINE sumInt #-}
-sumInt :: forall m a. (Monad m, Integral a) => Fold m (a, Maybe a) a
-sumInt = Fold step initial extract
-
-    where
-
-    initial = return $ Partial (0 :: a)
-
-    step s (a, ma) =
-        return
-            $ Partial
-                $ case ma of
-                    Nothing -> s + a
-                    Just old -> s + a - old
-
-    extract = return
-
--- XXX Overflow.
---
--- | Sum of all the elements in a rolling window:
---
--- \(S = \sum_{i=1}^n x_{i}\)
---
--- This is the first power sum.
---
--- >>> sum = powerSum 1
---
--- Uses Kahan-Babuska-Neumaier style summation for numerical stability of
--- floating precision arithmetic.
---
--- /Space/: \(\mathcal{O}(1)\)
---
--- /Time/: \(\mathcal{O}(n)\)
---
-{-# INLINE sum #-}
-sum :: forall m a. (Monad m, Num a) => Fold m (a, Maybe a) a
-sum = Fold step initial extract
-
-    where
-
-    initial =
-        return
-            $ Partial
-            $ Tuple'
-                (0 :: a) -- running sum
-                (0 :: a) -- accumulated rounding error
-
-    step (Tuple' total err) (new, mOld) =
-        let incr =
-                case mOld of
-                    -- XXX new may be large and err may be small we may lose it
-                    Nothing -> new - err
-                    -- XXX if (new - old) is large we may lose err
-                    Just old -> (new - old) - err
-            -- total is large and incr may be small, we may round incr here but
-            -- we will accumulate the rounding error in err1 in the next step.
-            total1 = total + incr
-            -- Accumulate any rounding error in err1
-            -- XXX In the Nothing case above we may lose err, therefore we
-            -- should use ((total1 - total) - new) + err here.
-            -- Or even in the just case if (new - old) is large we may lose
-            -- err, so we should use ((total1 - total) + (old - new)) + err.
-            err1 = (total1 - total) - incr
-        in return $ Partial $ Tuple' total1 err1
-
-    extract (Tuple' total _) = return total
-
--- | The number of elements in the rolling window.
---
--- This is the \(0\)th power sum.
---
--- >>> length = powerSum 0
---
-{-# INLINE length #-}
-length :: (Monad m, Num b) => Fold m (a, Maybe a) b
-length = Fold.foldl' step 0
-
-    where
-
-    step w (_, Nothing) = w + 1
-    step w _ = w
-
--- | Sum of the \(k\)th power of all the elements in a rolling window:
---
--- \(S_k = \sum_{i=1}^n x_{i}^k\)
---
--- >>> powerSum k = lmap (^ k) sum
---
--- /Space/: \(\mathcal{O}(1)\)
---
--- /Time/: \(\mathcal{O}(n)\)
-{-# INLINE powerSum #-}
-powerSum :: (Monad m, Num a) => Int -> Fold m (a, Maybe a) a
-powerSum k = lmap (^ k) sum
-
--- | Like 'powerSum' but powers can be negative or fractional. This is slower
--- than 'powerSum' for positive intergal powers.
---
--- >>> powerSumFrac p = lmap (** p) sum
---
-{-# INLINE powerSumFrac #-}
-powerSumFrac :: (Monad m, Floating a) => a -> Fold m (a, Maybe a) a
-powerSumFrac p = lmap (** p) sum
-
--------------------------------------------------------------------------------
--- Location
--------------------------------------------------------------------------------
-
--- Theoretically, we can approximate minimum in a rolling window by using a
--- 'powerMean' with sufficiently large negative power.
---
--- XXX If we need to know the minimum in the window only once in a while then
--- we can use linear search when it is extracted and not pay the cost all the
--- time.
---
--- | The minimum element in a rolling window.
---
--- If you want to compute the min of the entire stream Fold.min from streamly
--- package would be much faster.
---
--- /Time/: \(\mathcal{O}(n*w)\) where \(w\) is the window size.
---
-{-# INLINE min #-}
-min :: (Monad m, Ord a) => Fold m (a, Maybe a) a
-min = Fold step initial extract
-
-    where
-
-    initial = return $ Partial $ Tuple3' (0 :: Int) (0 :: Int)
-                (mempty :: DQ.Deque (Int, a))
-
-    step (Tuple3' i w q) (a, ma) =
-        case ma of
-            Nothing ->
-                return $ Partial $ Tuple3' (i + 1) (w + 1)
-                    (headCheck i q (w + 1) & dqloop (i, a))
-            Just _ ->
-                return $ Partial $ Tuple3' (i + 1) w
-                    (headCheck i q w & dqloop (i,a))
-
-    {-# INLINE headCheck #-}
-    headCheck i q w =
-        case DQ.uncons q of
-            Nothing -> q
-            Just (ia', q') ->
-                if fst ia' <= i - w
-                then q'
-                else q
-
-    dqloop ia q =
-        case DQ.unsnoc q of
-            Nothing -> DQ.snoc ia q
-            -- XXX This can be improved for the case of `=`
-            Just (ia', q') ->
-                if snd ia <= snd ia'
-                then dqloop ia q'
-                else DQ.snoc ia q
-
-    extract (Tuple3' _ _ q) = return $ snd
-                                $ fromMaybe (0, error "min: Empty stream")
-                                $ DQ.head q
-
--- Theoretically, we can approximate maximum in a rolling window by using a
--- 'powerMean' with sufficiently large positive power.
---
--- | The maximum element in a rolling window.
---
--- If you want to compute the max of the entire stream Fold.max from streamly
--- package would be much faster.
---
--- /Time/: \(\mathcal{O}(n*w)\) where \(w\) is the window size.
---
-{-# INLINE max #-}
-max :: (Monad m, Ord a) => Fold m (a, Maybe a) a
-max = Fold step initial extract
-
-    where
-
-    initial = return $ Partial $ Tuple3' (0 :: Int) (0 :: Int)
-                (mempty :: DQ.Deque (Int, a))
-
-    step (Tuple3' i w q) (a, ma) =
-        case ma of
-            Nothing ->
-                return $ Partial $ Tuple3' (i + 1) (w + 1)
-                    (headCheck i q (w + 1) & dqloop (i, a))
-            Just _ ->
-                return $ Partial $ Tuple3' (i + 1) w
-                    (headCheck i q w & dqloop (i,a))
-
-    {-# INLINE headCheck #-}
-    headCheck i q w =
-        case DQ.uncons q of
-            Nothing -> q
-            Just (ia', q') ->
-                if fst ia' <= i - w
-                then q'
-                else q
-
-    dqloop ia q =
-        case DQ.unsnoc q of
-        Nothing -> DQ.snoc ia q
-        -- XXX This can be improved for the case of `=`
-        Just (ia', q') ->
-            if snd ia >= snd ia'
-            then dqloop ia q'
-            else DQ.snoc ia q
-
-    extract (Tuple3' _ _ q) =
-        return
-            $ snd
-            $ fromMaybe (0, error "max: Empty stream")
-            $ DQ.head q
 
 -- | Arithmetic mean of elements in a sliding window:
 --
@@ -446,7 +194,7 @@ max = Fold step initial extract
 -- /Time/: \(\mathcal{O}(n)\)
 {-# INLINE mean #-}
 mean :: forall m a. (Monad m, Fractional a) => Fold m (a, Maybe a) a
-mean = Fold.teeWith (/) sum length
+mean = Window.mean
 
 -- | Same as 'mean' but uses Welford's algorithm to compute the mean
 -- incrementally.
@@ -504,7 +252,7 @@ welfordMean = Fold step initial extract
 -- /Time/: \(\mathcal{O}(n)\)
 {-# INLINE rawMoment #-}
 rawMoment :: (Monad m, Fractional a) => Int -> Fold m (a, Maybe a) a
-rawMoment k = Fold.teeWith (/) (powerSum k) length
+rawMoment k = Fold.teeWith (/) (Window.powerSum k) Window.length
 
 -- | Like 'rawMoment' but powers can be negative or fractional. This is
 -- slower than 'rawMoment' for positive intergal powers.
@@ -513,7 +261,7 @@ rawMoment k = Fold.teeWith (/) (powerSum k) length
 --
 {-# INLINE rawMomentFrac #-}
 rawMomentFrac :: (Monad m, Floating a) => a -> Fold m (a, Maybe a) a
-rawMomentFrac k = Fold.teeWith (/) (powerSumFrac k) length
+rawMomentFrac k = Fold.teeWith (/) (Window.powerSumFrac k) Window.length
 
 -- XXX Overflow can happen when large powers or large numbers are used. We can
 -- keep a running mean instead of running sum but that won't mitigate the
@@ -560,7 +308,7 @@ powerMeanFrac k = (** (1 / k)) <$> rawMomentFrac k
 --
 {-# INLINE harmonicMean #-}
 harmonicMean :: (Monad m, Fractional a) => Fold m (a, Maybe a) a
-harmonicMean = Fold.teeWith (/) length (lmap recip sum)
+harmonicMean = Fold.teeWith (/) Window.length (Window.lmap recip Window.sum)
 
 -- | Geometric mean, defined as:
 --
@@ -577,7 +325,7 @@ harmonicMean = Fold.teeWith (/) length (lmap recip sum)
 -- See https://en.wikipedia.org/wiki/Geometric_mean .
 {-# INLINE geometricMean #-}
 geometricMean :: (Monad m, Floating a) => Fold m (a, Maybe a) a
-geometricMean = exp <$> lmap log mean
+geometricMean = exp <$> Window.lmap log mean
 
 -- | The quadratic mean or root mean square (rms) of the numbers
 -- \(x_1, x_2, \ldots, x_n\) is defined as:
@@ -674,21 +422,6 @@ ewmaRampUpSmoothing n k1 = extract <$> Fold.foldl' step initial
 -------------------------------------------------------------------------------
 -- Spread/Dispersion
 -------------------------------------------------------------------------------
-
--- | The difference between the max and min elements of a rolling window.
---
--- >>> range = Fold.teeWith (-) max min
---
--- If you want to compute the range of the entire stream @Fold.teeWith (-)
--- Fold.max Fold.min@  from the streamly package would be much faster.
---
--- /Space/: \(\mathcal{O}(n)\) where @n@ is the window size.
---
--- /Time/: \(\mathcal{O}(n*w)\) where \(w\) is the window size.
---
-{-# INLINE range #-}
-range :: (Monad m, Num a, Ord a) => Fold m (a, Maybe a) a
-range = Fold.teeWith (-) max min
 
 -- | @md n@ computes the mean absolute deviation (or mean deviation) in a
 -- sliding window of last @n@ elements in the stream.
@@ -835,7 +568,7 @@ kurtosis =
 --
 {-# INLINE sampleVariance #-}
 sampleVariance :: (Monad m, Fractional a) => Fold m (a, Maybe a) a
-sampleVariance = Fold.teeWith (\n s2 -> n * s2 / (n - 1)) length variance
+sampleVariance = Fold.teeWith (\n s2 -> n * s2 / (n - 1)) Window.length variance
 
 -- | Sample standard deviation:
 --
@@ -861,4 +594,4 @@ sampleStdDev = sqrt <$> sampleVariance
 -- /Time/: \(\mathcal{O}(n)\)
 {-# INLINE stdErrMean #-}
 stdErrMean :: (Monad m, Floating a) => Fold m (a, Maybe a) a
-stdErrMean = Fold.teeWith (\sd n -> sd / sqrt n) sampleStdDev length
+stdErrMean = Fold.teeWith (\sd n -> sd / sqrt n) sampleStdDev Window.length
