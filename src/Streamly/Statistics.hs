@@ -157,8 +157,9 @@ import Streamly.Internal.Data.Fold.Type (Fold(..), Step(..))
 import Streamly.Internal.Data.Tuple.Strict (Tuple'(..))
 
 import qualified Streamly.Data.Fold as Fold
+import qualified Streamly.Internal.Data.Array.Foreign.Mut as MA
 import qualified Streamly.Internal.Data.Fold.Window as Window
-import qualified Streamly.Internal.Data.Ring.Foreign as Ring
+import qualified Streamly.Internal.Data.Stream.IsStream as Stream
 
 import Prelude hiding (length, sum, minimum, maximum)
 
@@ -442,21 +443,21 @@ ewmaRampUpSmoothing n k1 = extract <$> Fold.foldl' step initial
 --
 -- /Pre-release/
 {-# INLINE md #-}
-md ::  MonadIO m => Int -> Fold m Double Double
-md n = Ring.slidingWindowWith n $
-    Fold.teeWith getMD (Fold.lmap fst mean) (Fold.lmap snd Fold.last)
+md ::  MonadIO m => Fold m ((Double, Maybe Double), m (MA.Array Double)) Double
+md =
+    Fold.rmapM computeMD
+        $ Fold.tee (Fold.lmap fst mean) (Fold.lmap snd Fold.last)
 
     where
 
-    getMD mn y =
-        case y of
-            Just (rb, rh, i)
-                | i < n -> foldRB Ring.unsafeFoldRing mn i rh rb
-                | otherwise -> foldRB Ring.unsafeFoldRingFull mn n rh rb
-            Nothing -> 0.0
-
-    foldRB f mn i rh rb =
-        f rh (\b a -> abs (mn - a) / fromIntegral i + b) 0.0 rb
+    computeMD (mn, rng) =
+        case rng of
+            Just action -> do
+                arr <- action
+                Stream.fold Fold.mean
+                    $ Stream.map (\a -> abs (mn - a))
+                    $ Stream.unfold MA.read arr
+            Nothing -> return 0.0
 
 -- | The variance \(\sigma^2\) of a population of \(n\) equally likely values
 -- is defined as the average of the squares of deviations from the mean

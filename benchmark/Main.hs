@@ -215,6 +215,8 @@ main =
         , benchWithFold numElements "kurtosis (entire stream)"
             (Statistics.cumulative (Statistics.kurtosis))
 #endif
+        , benchWithFold numElements "md (window size 100)"
+            (Ring.slidingWindowWith 100 Statistics.md)
         ]
     , bgroup
         "scan"
@@ -249,11 +251,6 @@ main =
         , benchWithPostscan
             numElements
             "md (window size 100)"
-            (Statistics.md 100)
-        , benchWithPostscan
-            numElements
-            "md (window size 1000)"
-            (Statistics.md 1000)
-
+            (Ring.slidingWindowWith 100 Statistics.md)
         ]
     ]
