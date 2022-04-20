@@ -7,7 +7,7 @@ import Streamly.Statistics
 import qualified Streamly.Internal.Data.Ring.Foreign as Ring
 import qualified Streamly.Prelude as S
 
-import Prelude hiding (sum, max, min)
+import Prelude hiding (sum, maximum, minimum)
 
 main :: IO ()
 main = hspec $ do
@@ -44,14 +44,14 @@ main = hspec $ do
                 it "Infinite" $ a  == sI
                 it ("Finite " ++ show winSize) $ b == sW
 
-        describe "min" $ do
+        describe "minimum" $ do
             let scanInf = [31, 31, 31, 26, 26, 26, 26] :: [Double]
                 scanWin = [31, 31, 31, 26, 26, 26, 53] :: [Double]
-            testFunc testCase1 min scanInf scanWin
-        describe "max" $ do
+            testFunc testCase1 minimum scanInf scanWin
+        describe "maximum" $ do
             let scanInf = [31, 41, 59, 59, 59, 59, 97] :: [Double]
                 scanWin = [31, 41, 59, 59, 59, 58, 97] :: [Double]
-            testFunc testCase1 max scanInf scanWin
+            testFunc testCase1 maximum scanInf scanWin
         describe "range" $ do
             let scanInf = [0, 10, 28, 33, 33, 33, 71] :: [Double]
                 scanWin = [0, 10, 28, 33, 33, 32, 44] :: [Double]
