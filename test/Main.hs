@@ -27,6 +27,16 @@ main = hspec $ do
                 it ("should not deviate more than " ++ show deviationLimit)
                     $ c1 >= -1 * deviationLimit && c1 <= deviationLimit
 
+            testFunc2 f = do
+                let c = S.fromList [10.0, 11.0, 12.0, 14.0]
+                a1 <- runIO $ S.fold (Ring.slidingWindowWith 2 f) c
+                a2 <- runIO $ S.fold (Ring.slidingWindowWith 3 f) c
+                a3 <- runIO $ S.fold (Ring.slidingWindowWith 4 f) c
+                it ("MD should be 1.0 , 1.1111111111111114 , 1.25 but actual is "
+                    ++ show a1 ++ " " ++ show a2 ++ " " ++ show a3)
+                    (a1 == 1.0 && a2 == 1.1111111111111114 && a3 == 1.25)
+
+        describe "MD" $ testFunc2 md
         describe "Sum" $ testFunc sum
         describe "mean" $ testFunc mean
         describe "welfordMean" $ testFunc welfordMean
