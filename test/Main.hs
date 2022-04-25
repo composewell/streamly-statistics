@@ -1,15 +1,15 @@
 {-# LANGUAGE TupleSections #-}
 
-import Test.Hspec
-
-import Streamly.Statistics
-
+import qualified Data.Map.Strict as Map
 import qualified Streamly.Internal.Data.Array.Foreign.Type as Array
 import qualified Streamly.Internal.Data.Ring.Foreign as Ring
 import qualified Streamly.Internal.Data.Stream.IsStream as Stream
 import qualified Streamly.Prelude as S
 
 import Prelude hiding (sum, maximum, minimum)
+
+import Test.Hspec
+import Streamly.Statistics
 
 jackKnifeInput :: [Double]
 jackKnifeInput = [1.0::Double, 2.0, 3.0, 4.0]
@@ -104,6 +104,38 @@ main = hspec $ do
                     )
                     (res == expRes)
 
+            testFuncHistogram = do
+                let strm = S.fromList [1..15]
+                res <- runIO $
+                    S.fold (histogram (binOffsetSize (0::Int) (3::Int))) strm
+                let expected = Map.fromList
+                                [ (0::Int, 2::Int)
+                                , (1, 3)
+                                , (2, 3)
+                                , (3, 3)
+                                , (4, 3)
+                                , (5, 1)
+                                ]
+
+                it ("Map should be = "
+                    ++ show expected
+                    ++ " Actual is = "
+                    ++ show res) (expected == res)
+
+            testFuncbinFromSizeN low binSize nbins x exp0 = do
+                let res = binFromSizeN low binSize nbins x
+                it ("Bin should be = "
+                    ++ show exp0
+                    ++ " Actual is = "
+                    ++ show res) (res == exp0)
+
+            testFuncbinFromToN low high n x exp0 = do
+                let res = binFromToN low high n x
+                it ("Bin should be = "
+                    ++ show exp0
+                    ++ " Actual is = "
+                    ++ show res) (res == exp0)
+
         describe "Kurt" testFuncKurt
         describe "JackKnife Mean" $
             testJackKnife jackKnifeMean jackKnifeInput jackMeanRes
@@ -111,7 +143,6 @@ main = hspec $ do
             testJackKnife jackKnifeVariance jackKnifeInput jackVarianceRes
         describe "JackKnife StdDev" $
             testJackKnife jackKnifeStdDev jackKnifeInput jackStdDevRes
-
         describe "minimum" $ do
             let scanInf = [31, 31, 31, 26, 26, 26, 26] :: [Double]
                 scanWin = [31, 31, 31, 26, 26, 26, 53] :: [Double]
@@ -136,3 +167,20 @@ main = hspec $ do
             let scanInf = [1, 1, 1, 1, 1, 2] :: [Double]
                 scanWin = [1, 1, 1, 1, 1, 3] :: [Double]
             testFunc testCase2 welfordMean scanInf scanWin
+        describe "histogram" testFuncHistogram
+        describe "binFromSizeN AboveRange" $
+            testFuncbinFromSizeN (0::Int) 2 10 55 AboveRange
+        describe "binFromSizeN BelowRange" $
+            testFuncbinFromSizeN (0::Int) 2 10 (-1) BelowRange
+        describe "binFromSizeN InRange" $
+            testFuncbinFromSizeN (0::Int) 2 10 19 (InRange 9)
+        describe "binFromSizeN AboveRange" $
+            testFuncbinFromSizeN (0::Int) 2 10 20 AboveRange
+        describe "binFromToN AboveRange" $
+            testFuncbinFromToN (0::Int) 49 10 55 AboveRange
+        describe "binFromToN BelowRange" $
+            testFuncbinFromToN (0::Int) 49 10 (-1) BelowRange
+        describe "binFromToN InRange"    $
+            testFuncbinFromToN (0::Int) 49 10 19 (InRange 3)
+        describe "binFromToN AboveRange" $
+            testFuncbinFromToN (0::Int) 50 10 20 (InRange 4)
