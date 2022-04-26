@@ -156,15 +156,20 @@ module Streamly.Statistics
     , binFromToN
     , binBoundaries
     , histogram
+
+    , jackKnifeMean
     )
 where
 
 import Control.Exception (assert)
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.Map.Strict (Map)
+import Data.Functor.Identity (runIdentity)
+import Foreign.Storable (Storable)
 import Streamly.Data.Fold.Tee(Tee(..), toFold)
 import Streamly.Internal.Data.Fold.Type (Fold(..), Step(..))
 import Streamly.Internal.Data.Tuple.Strict (Tuple'(..))
+import Streamly.Internal.Data.Array.Foreign.Type (Array, length, toStream)
 
 import qualified Streamly.Internal.Data.Fold as Fold
 import qualified Streamly.Internal.Data.Array.Foreign as Array
@@ -173,6 +178,7 @@ import qualified Streamly.Internal.Data.Fold.Window as Window
 import qualified Streamly.Internal.Data.Stream.IsStream as Stream
 
 import Prelude hiding (length, sum, minimum, maximum)
+import Streamly.Internal.Data.Stream.IsStream (SerialT)
 
 -- TODO: Overflow checks. Would be good if we can directly replace the
 -- operations with overflow checked operations.
@@ -736,3 +742,12 @@ binBoundaries = undefined
 {-# INLINE histogram #-}
 histogram :: (Monad m, Ord k) => (a -> k) -> Fold m a (Map k Int)
 histogram bin = Fold.classifyWith bin Fold.length
+
+{-# INLINE jackKnifeMean #-}
+jackKnifeMean :: (Monad m, Fractional a, Storable a) => Array a -> SerialT m a
+jackKnifeMean arr = do
+    let len = length arr - 1
+        s = runIdentity $ Stream.fold Fold.sum $ toStream arr
+    Stream.zipWith
+        (\sum b -> (sum - b) / fromIntegral len)
+        (Stream.repeat s) (toStream arr)
