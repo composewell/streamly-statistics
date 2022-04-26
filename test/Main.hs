@@ -4,10 +4,18 @@ import Test.Hspec
 
 import Streamly.Statistics
 
+import qualified Streamly.Internal.Data.Array.Foreign.Type as Array
 import qualified Streamly.Internal.Data.Ring.Foreign as Ring
+import qualified Streamly.Internal.Data.Stream.IsStream as Stream
 import qualified Streamly.Prelude as S
 
 import Prelude hiding (sum, maximum, minimum)
+
+jackKnifeInput :: [Double]
+jackKnifeInput = [1.0::Double, 2.0, 3.0, 4.0]
+
+jackMeanRes :: [Double]
+jackMeanRes = [3.0, 2.6666666666666665, 2.3333333333333335, 2.0]
 
 main :: IO ()
 main = hspec $ do
@@ -71,7 +79,18 @@ main = hspec $ do
                    )
                    (krt == 1.5000000000007478)
 
+            testJackKnife f ls expRes = do
+                let arr = Array.fromList ls
+                res <- Stream.toList $ f arr
+                it ("testJackKnife result should be ="
+                    ++ show expRes
+                    ++ " Actual is = " ++show res
+                    )
+                    (res == expRes)
+
         describe "Kurt" testFuncKurt
+        describe "JackKnife Mean" $
+            testJackKnife jackKnifeMean jackKnifeInput jackMeanRes
 
         describe "minimum" $ do
             let scanInf = [31, 31, 31, 26, 26, 26, 26] :: [Double]
