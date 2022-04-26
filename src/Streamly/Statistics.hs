@@ -566,15 +566,15 @@ skewness =
 --
 -- See https://en.wikipedia.org/wiki/Kurtosis .
 --
--- /Broken/
 {-# INLINE kurtosis #-}
 kurtosis :: (Monad m, Floating a) => Fold m (a, Maybe a) a
 kurtosis =
     toFold
         $ (\rm4 rm3 sd mu ->
-              rm4 / sd ^ (4 :: Int)
-            - 4 * ((mu / sd) * (rm3 / sd ^ (3 :: Int)))
-            - 3 * ((mu / sd) ^ (4 :: Int))
+             ( 3 * mu ^ (4 :: Int)
+            + 6 * mu ^ (2 :: Int) * sd ^ (2 :: Int)
+            - 4 * mu * rm3
+            + rm4) / (sd ^ (4 :: Int))
           )
         <$> Tee (rawMoment 4)
         <*> Tee (rawMoment 3)

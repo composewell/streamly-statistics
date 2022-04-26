@@ -54,6 +54,25 @@ main = hspec $ do
                 it "Infinite" $ a  == sI
                 it ("Finite " ++ show winSize) $ b == sW
 
+            testFuncKurt = do
+                let c = S.fromList
+                        [ 10.0 :: Double
+                        , 11.0
+                        , 12.0
+                        , 14.0
+                        , 10.0
+                        , 11.0
+                        , 12.0
+                        , 14.0
+                        ]
+                krt <- runIO $ S.fold (Ring.slidingWindow 3 kurtosis) c
+                it ( "kurtosis should be 1.5000000000007478 Actual is " ++
+                    show krt
+                   )
+                   (krt == 1.5000000000007478)
+
+        describe "Kurt" testFuncKurt
+
         describe "minimum" $ do
             let scanInf = [31, 31, 31, 26, 26, 26, 26] :: [Double]
                 scanWin = [31, 31, 31, 26, 26, 26, 53] :: [Double]
