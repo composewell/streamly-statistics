@@ -17,6 +17,22 @@ jackKnifeInput = [1.0::Double, 2.0, 3.0, 4.0]
 jackMeanRes :: [Double]
 jackMeanRes = [3.0, 2.6666666666666665, 2.3333333333333335, 2.0]
 
+jackVarianceRes :: [Double]
+jackVarianceRes =
+    [ 0.6666666666666661
+    , 1.5555555555555554
+    , 1.5555555555555545
+    , 0.666666666666667
+    ]
+
+jackStdDevRes :: [Double]
+jackStdDevRes =
+    [ 0.8164965809277257
+    , 1.247219128924647
+    , 1.2472191289246466
+    , 0.8164965809277263
+    ]
+
 main :: IO ()
 main = hspec $ do
     describe "Numerical stability while streaming" $ do
@@ -91,6 +107,10 @@ main = hspec $ do
         describe "Kurt" testFuncKurt
         describe "JackKnife Mean" $
             testJackKnife jackKnifeMean jackKnifeInput jackMeanRes
+        describe "JackKnife Variance" $ do
+            testJackKnife jackKnifeVariance jackKnifeInput jackVarianceRes
+        describe "JackKnife StdDev" $
+            testJackKnife jackKnifeStdDev jackKnifeInput jackStdDevRes
 
         describe "minimum" $ do
             let scanInf = [31, 31, 31, 26, 26, 26, 26] :: [Double]

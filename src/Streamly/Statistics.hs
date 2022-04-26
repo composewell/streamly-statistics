@@ -132,7 +132,9 @@ module Streamly.Statistics
     , Window.range
     , md
     , variance
+    , jackKnifeVariance
     , stdDev
+    , jackKnifeStdDev
 
     -- ** Shape
     -- | Third and fourth order central moments are a measure of shape.
@@ -168,7 +170,9 @@ import Data.Functor.Identity (runIdentity, Identity)
 import Data.Map.Strict (Map)
 import Foreign.Storable (Storable)
 import Streamly.Data.Fold.Tee(Tee(..), toFold)
+import Streamly.Internal.Data.Array.Foreign.Type (Array, length, toStream)
 import Streamly.Internal.Data.Fold.Type (Fold(..), Step(..))
+import Streamly.Internal.Data.Stream.IsStream (SerialT)
 import Streamly.Internal.Data.Tuple.Strict (Tuple'(..))
 import Streamly.Internal.Data.Array.Foreign.Type (Array, length, toStream)
 
@@ -765,3 +769,24 @@ binBoundaries = undefined
 {-# INLINE histogram #-}
 histogram :: (Monad m, Ord k) => (a -> k) -> Fold m a (Map k Int)
 histogram bin = Fold.classifyWith bin Fold.length
+
+{-# INLINE jackKnifeVariance #-}
+jackKnifeVariance :: (Monad m, Fractional a, Storable a) =>
+    Array a -> SerialT m a
+jackKnifeVariance arr = do
+    let len = fromIntegral $ length arr - 1
+        strm1 = Stream.map (\x -> (x, x ^ (2::Int))) $ toStream arr
+        strm2 = Stream.map (\x -> (x, x ^ (2::Int))) $ toStream arr
+        calVar (sum, sum2) (b, b2) =
+            (sum2 - b2) / len -  ((sum - b) / len) ^ (2::Int)
+        foldSum (b1, b2) (a1, a2) = (b1 + a1, b2 + a2)
+        s = runIdentity $
+            Stream.fold
+            (Fold.foldl' foldSum (0.0, 0.0))
+            strm1
+    Stream.zipWith calVar (Stream.repeat s) strm2
+
+{-# INLINE jackKnifeStdDev #-}
+jackKnifeStdDev :: (Monad m, Storable a, Floating a) =>
+    Array a -> SerialT m a
+jackKnifeStdDev = Stream.map sqrt . jackKnifeVariance
