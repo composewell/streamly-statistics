@@ -6,6 +6,7 @@ import Streamly.Internal.Data.Stream.IsStream (SerialT)
 import Test.Hspec.Core.Spec (SpecM)
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import qualified Streamly.Internal.Data.Array.Foreign.Mut as MA
 import qualified Streamly.Internal.Data.Array.Foreign.Type as Array
 import qualified Streamly.Internal.Data.Fold as Fold
@@ -128,6 +129,9 @@ testMode inputList res = do
     mode0 <- S.fold mode $ S.fromList inputList
     it ("Mode " ++ show mode0) $ mode0 == res
 
+sampleList :: [Double]
+sampleList = [1.0, 2.0, 3.0, 4.0, 5.0]
+
 main :: IO ()
 main = hspec $ do
     describe "Numerical stability while streaming" $ do
@@ -163,6 +167,21 @@ main = hspec $ do
                 it "Infinite" $ a  == sI
                 it ("Finite " ++ show winSize) $ b == sW
 
+            testFuncResample n tc = do
+                let arr = Array.fromList tc
+                a <- runIO $ S.toList $ resample n arr Fold.mean
+                it ("resample " ++ show a) (Prelude.length a == n)
+
+            testFuncResampleOne tc = do
+                let c = Array.fromList tc
+                    s = Set.fromList tc
+                    a = S.unfold resampleOne c
+                ls <- runIO $ S.toList a
+                let s' = Set.fromList ls
+                    sub = Set.isSubsetOf s' s
+                it ("resampleOne " ++ show ls)
+                    (Prelude.length ls == Array.length c && sub)
+
         describe "MD" $ testFuncMD md
         describe "Kurt" testFuncKurt
 
@@ -181,6 +200,13 @@ main = hspec $ do
                 (Map.fromList [(1, 2), (2, 1), (3, 3)])
         describe "Mode" $ testMode [1::Int, 1, 2, 3, 3, 3] (Just (3, 3))
         describe "Mode Empty " $ testMode ([]::[Int]) Nothing
+
+        describe "resampleOne" $ do
+            testFuncResampleOne sampleList
+        describe "resample 4" $ do
+            testFuncResample 4 sampleList
+        describe "resample 6" $ do
+            testFuncResample 6 sampleList
 
         -- Spread/Mean
         describe "minimum" $ do

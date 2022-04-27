@@ -165,6 +165,9 @@ module Streamly.Statistics
     , binFromToN
     , binBoundaries
     , histogram
+    -- ** resample
+    , resample
+    , resampleOne
     )
 where
 
@@ -174,16 +177,21 @@ import Data.Functor.Identity (runIdentity, Identity)
 import Data.Map.Strict (Map, foldrWithKey)
 import Foreign.Storable (Storable)
 import Streamly.Data.Fold.Tee(Tee(..), toFold)
-import Streamly.Internal.Data.Array.Foreign.Type (Array, length, toStream)
+import Streamly.Internal.Data.Array.Foreign.Type (Array, length, toStream, unsafeIndexIO)
+import Streamly.Internal.Control.Concurrent
 import Streamly.Internal.Data.Fold.Type (Fold(..), Step(..))
 import Streamly.Internal.Data.Stream.IsStream (SerialT)
 import Streamly.Internal.Data.Tuple.Strict (Tuple'(..))
+import Streamly.Internal.Data.Unfold.Type (Unfold(..))
+import Streamly.Internal.Data.Stream.StreamD.Step (Step(..))
 
 import qualified Streamly.Internal.Data.Array.Foreign as Array
 import qualified Streamly.Internal.Data.Array.Foreign.Mut as MA
 import qualified Streamly.Internal.Data.Fold as Fold
 import qualified Streamly.Internal.Data.Fold.Window as Window
 import qualified Streamly.Internal.Data.Stream.IsStream as Stream
+
+import System.Random.MWC
 
 import Prelude hiding (length, sum, minimum, maximum)
 
@@ -818,3 +826,37 @@ binBoundaries = undefined
 {-# INLINE histogram #-}
 histogram :: (Monad m, Ord k) => (a -> k) -> Fold m a (Map k Int)
 histogram bin = Fold.classifyWith bin Fold.length
+
+-- | Given an array of n elements, randomly generate n indices and create
+-- an output stream from those indices. Create a number of resamples of the
+-- array like this. Fold the generated streams using the supplied fold,
+-- creating an output stream of fold results.
+
+{-# INLINE resampleOne #-}
+resampleOne :: (MonadIO m, Storable a) =>
+    Unfold m (Array a) a
+resampleOne = Unfold step inject
+
+    where
+
+    inject arr = do
+        g <- liftIO createSystemRandom
+        liftIO $ return (g, arr, length arr, 0)
+
+    step (g, arr, len, idx) = liftIO $ do
+        if idx >= len
+        then return Stop
+        else do
+            i <- uniformRM (0, len - 1) g
+            e <- unsafeIndexIO i arr
+            return $ Yield e (g, arr, len, idx + 1)
+
+-- | Create a stream of resamples
+{-# INLINE resample #-}
+resample :: (MonadAsync m, Storable a) =>
+       Int          -- ^ Number of resamples to compute.
+    -> Array a      -- ^ Original sample.
+    -> Fold m a b   -- ^ Estimation fold
+    -> SerialT m b
+resample n arr fld =
+    Stream.replicateM n (Stream.fold fld $ Stream.unfold resampleOne arr)
