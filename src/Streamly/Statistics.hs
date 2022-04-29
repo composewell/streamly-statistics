@@ -702,6 +702,55 @@ binBoundaries :: -- Integral a =>
     Array.Array a -> a -> HistBin a
 binBoundaries = undefined
 
+{-
+floatToFixed :: HasResolution a => Double -> Fixed a
+floatToFixed x =
+    let r = fromInteger (resolution (undefined :: Fixed a))
+     in MkFixed (round (r * x))
+
+-- Binning floating point values.
+--
+-- | Find the bin a value belongs to, given a bin alignment value (offset from
+-- zero of the first bin after zero, zero if the bin start aligns with 0) and
+-- the bin size.  The bin is identified by the lowest possible value in the
+-- bin.
+--
+-- Alignment must be less than the size.
+--
+{-# INLINE binAlignStep #-}
+binAlignStep :: a -> a -> a -> Fixed b
+binAlignStep align size x =
+    -- Instead of returning Fixed, we can also use "resolution" as an argument
+    -- and return an Int/Integer.
+    -- Make the bin floors fixed precision values to make it deterministic
+    -- The precision must be better than the size of the bin
+    -- size must be an integral multiple of resolution, the multiplier should
+    -- be >= 1.
+    -- alignment should be integral multiple of resolution, but should be less
+    -- than size.
+    -- Or just convert the doubles to Fixed and then bin
+    -- First round all the numbers to nearest resolution multiple and then bin
+    -- them.
+    assert (align < size) (floor (x + k / size))
+
+data Bin a = Classified a | Unclassified a deriving (Show, Eq, Ord)
+
+-- | BoundedBins lower, size, count
+-- The first element of the tuple is the bin key which is the lowest integral
+-- value in the bin. Values below the lower range and above the upper range
+-- can be placed in an "Unclassified" bin.
+{-# INLINE binFromStepN #-}
+binFromStepN :: Integral a => Int -> Int -> Int -> a -> (Bin a, a)
+binFromStepN resolution low size count x =
+    let bin = fromIntegral $ fromIntegral x `div` size
+        high = low + size * count
+        bin' =
+            if bin >= fromIntegral low && bin <= fromIntegral high
+            then (Classified bin, x)
+            else (Unclassified bin, x)
+        in bin'
+-}
+
 -- | Given a bin classifier function and a stream of values, generate a
 -- histogram map from indices of bins to the number of items in the bin.
 --
