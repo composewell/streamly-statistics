@@ -148,15 +148,26 @@ module Streamly.Statistics
     , sampleVariance
     , sampleStdDev
     , stdErrMean
+
+    -- ** Histograms
+    , HistBin (..)
+    , binOffsetSize
+    , binFromSizeN
+    , binFromToN
+    , binBoundaries
+    , histogram
     )
 where
 
+import Control.Exception (assert)
 import Control.Monad.IO.Class (MonadIO(..))
+import Data.Map.Strict (Map)
 import Streamly.Data.Fold.Tee(Tee(..), toFold)
 import Streamly.Internal.Data.Fold.Type (Fold(..), Step(..))
 import Streamly.Internal.Data.Tuple.Strict (Tuple'(..))
 
-import qualified Streamly.Data.Fold as Fold
+import qualified Streamly.Internal.Data.Fold as Fold
+import qualified Streamly.Internal.Data.Array.Foreign as Array
 import qualified Streamly.Internal.Data.Array.Foreign.Mut as MA
 import qualified Streamly.Internal.Data.Fold.Window as Window
 import qualified Streamly.Internal.Data.Stream.IsStream as Stream
@@ -612,3 +623,91 @@ sampleStdDev = sqrt <$> sampleVariance
 {-# INLINE stdErrMean #-}
 stdErrMean :: (Monad m, Floating a) => Fold m (a, Maybe a) a
 stdErrMean = Fold.teeWith (\sd n -> sd / sqrt n) sampleStdDev Window.length
+
+-------------------------------------------------------------------------------
+-- Histograms
+-------------------------------------------------------------------------------
+
+-- | @binOffsetSize offset binSize input@. Given an integral input value,
+-- return its bin index provided that each bin contains @binSize@ items and the
+-- bins are aligned such that the 0 index bin starts at @offset@ from 0. If
+-- offset = 0 then the bin with index 0 would have values from 0 to binSize -
+-- 1.
+--
+-- This API does not put a bound on the number of bins, therefore, the number
+-- of bins could be potentially large depending on the range of values.
+--
+{-# INLINE binOffsetSize #-}
+binOffsetSize :: Integral a => a -> a -> a -> a
+binOffsetSize offset binSize x = (x - offset) `div` binSize
+
+data HistBin a = BelowRange | InRange a | AboveRange deriving (Eq, Show)
+
+instance (Eq a, Ord a) => Ord (HistBin a) where
+    compare BelowRange BelowRange = EQ
+    compare BelowRange (InRange _) = LT
+    compare BelowRange AboveRange = LT
+
+    compare (InRange _) BelowRange = GT
+    compare (InRange x) (InRange y)= x `compare` y
+    compare (InRange _) AboveRange = LT
+
+    compare AboveRange BelowRange = GT
+    compare AboveRange (InRange _) = GT
+    compare AboveRange AboveRange = EQ
+
+-- | @binFromSizeN low binSize nbins input@. Classify @input@ into bins
+-- specified by a @low@ limit, @binSize@ and @nbins@. Inputs below the lower
+-- limit are classified into 'BelowRange' and inputs above the highest bin are
+-- classified into 'AboveRange'. 'InRange' inputs are classified into bins
+-- starting from bin index 0.
+--
+{-# INLINE binFromSizeN #-}
+binFromSizeN :: Integral a => a -> a -> a -> a -> HistBin a
+binFromSizeN low binSize nbins x =
+    let high = low + binSize * nbins
+     in if x < low
+        then BelowRange
+        else if x >= high
+             then AboveRange
+             else InRange ((x - low) `div` binSize)
+
+-- | @binFromToN low high nbins input@. Like @binFromSizeN@ except that a range
+-- of lower and higher limit is specified. @binSize@ is computed using the
+-- range and @nbins@. @nbins@ is rounded to the range @0 < nbins < (high - low
+-- + 1)@. @high >= low@ must hold.
+--
+{-# INLINE binFromToN #-}
+binFromToN :: Integral a => a -> a -> a -> a -> HistBin a
+binFromToN low high n x =
+    let count = high - low + 1
+        n1 = max n 1
+        n2 = min n1 count
+        binSize = count `div` n2
+        nbins =
+            if binSize * n2 < count
+            then n2 + 1
+            else n2
+     in assert (high >= low) (binFromSizeN low binSize nbins x)
+
+-- Use binary search to find the bin
+--
+-- | Classify an input value to bins using the bin boundaries specified in an
+-- array.
+--
+-- /Unimplemented/
+--
+{-# INLINE binBoundaries #-}
+binBoundaries :: -- Integral a =>
+    Array.Array a -> a -> HistBin a
+binBoundaries = undefined
+
+-- | Given a bin classifier function and a stream of values, generate a
+-- histogram map from indices of bins to the number of items in the bin.
+--
+-- >>> Stream.fold (histogram (binOffsetSize 0 3)) $ Stream.fromList [1..15]
+-- fromList [(0,2),(1,3),(2,3),(3,3),(4,3),(5,1)]
+--
+{-# INLINE histogram #-}
+histogram :: (Monad m, Ord k) => (a -> k) -> Fold m a (Map k Int)
+histogram bin = Fold.classifyWith bin Fold.length

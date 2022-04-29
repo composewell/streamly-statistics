@@ -99,6 +99,7 @@ library
     exposed-modules:     Streamly.Statistics
     build-depends:       base     >= 4.9 && < 5
                        , streamly >= 0.8   && < 0.8.3
+                       , containers  >= 0.5   && < 0.7
     hs-source-dirs:      src
 
 test-suite test
@@ -112,6 +113,7 @@ test-suite test
                       , QuickCheck     >= 2.10  && < 2.15
                       , hspec          >= 2.0   && < 3
                       , random         >= 1.0.0 && < 2
+                      , containers  >= 0.5   && < 0.7
 
 benchmark benchmark
     import: ghc-options
