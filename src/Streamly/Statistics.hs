@@ -132,9 +132,7 @@ module Streamly.Statistics
     , Window.range
     , md
     , variance
-    , jackKnifeVariance
     , stdDev
-    , jackKnifeStdDev
 
     -- ** Shape
     -- | Third and fourth order central moments are a measure of shape.
@@ -153,6 +151,8 @@ module Streamly.Statistics
 
     -- ** Resampling
     , jackKnifeMean
+    , jackKnifeVariance
+    , jackKnifeStdDev
 
     -- ** Histograms
     , HistBin (..)
@@ -174,7 +174,6 @@ import Streamly.Internal.Data.Array.Foreign.Type (Array, length, toStream)
 import Streamly.Internal.Data.Fold.Type (Fold(..), Step(..))
 import Streamly.Internal.Data.Stream.IsStream (SerialT)
 import Streamly.Internal.Data.Tuple.Strict (Tuple'(..))
-import Streamly.Internal.Data.Array.Foreign.Type (Array, length, toStream)
 
 import qualified Streamly.Internal.Data.Fold as Fold
 import qualified Streamly.Internal.Data.Array.Foreign as Array
@@ -183,7 +182,6 @@ import qualified Streamly.Internal.Data.Fold.Window as Window
 import qualified Streamly.Internal.Data.Stream.IsStream as Stream
 
 import Prelude hiding (length, sum, minimum, maximum)
-import Streamly.Internal.Data.Stream.IsStream (SerialT)
 
 -- TODO: Overflow checks. Would be good if we can directly replace the
 -- operations with overflow checked operations.
@@ -682,6 +680,27 @@ jackKnifeMean arr = do
         s = foldArray Fold.sum arr
      in Stream.map (\b -> (s - b) / len) $ toStream arr
 
+-- | Given an array of @n@ items, compute variance of @(n - 1)@ items at a time,
+-- producing a stream of all possible variance values omitting a different item
+-- every time.
+--
+{-# INLINE jackKnifeVariance #-}
+jackKnifeVariance :: (Monad m, Fractional a, Storable a) =>
+    Array a -> SerialT m a
+jackKnifeVariance arr = do
+    let len = fromIntegral $ length arr - 1
+        foldSums (s, s2) x = (s + x, s2 + x ^ (2 :: Int))
+        (sum, sum2) = foldArray (Fold.foldl' foldSums (0.0, 0.0)) arr
+        var x = (sum2 - x ^ (2 :: Int)) / len -  ((sum - x) / len) ^ (2::Int)
+     in Stream.map var $ toStream arr
+
+-- | Standard deviation computed from 'jackKnifeVariance'.
+--
+{-# INLINE jackKnifeStdDev #-}
+jackKnifeStdDev :: (Monad m, Storable a, Floating a) =>
+    Array a -> SerialT m a
+jackKnifeStdDev = Stream.map sqrt . jackKnifeVariance
+
 -------------------------------------------------------------------------------
 -- Histograms
 -------------------------------------------------------------------------------
@@ -769,24 +788,3 @@ binBoundaries = undefined
 {-# INLINE histogram #-}
 histogram :: (Monad m, Ord k) => (a -> k) -> Fold m a (Map k Int)
 histogram bin = Fold.classifyWith bin Fold.length
-
-{-# INLINE jackKnifeVariance #-}
-jackKnifeVariance :: (Monad m, Fractional a, Storable a) =>
-    Array a -> SerialT m a
-jackKnifeVariance arr = do
-    let len = fromIntegral $ length arr - 1
-        strm1 = Stream.map (\x -> (x, x ^ (2::Int))) $ toStream arr
-        strm2 = Stream.map (\x -> (x, x ^ (2::Int))) $ toStream arr
-        calVar (sum, sum2) (b, b2) =
-            (sum2 - b2) / len -  ((sum - b) / len) ^ (2::Int)
-        foldSum (b1, b2) (a1, a2) = (b1 + a1, b2 + a2)
-        s = runIdentity $
-            Stream.fold
-            (Fold.foldl' foldSum (0.0, 0.0))
-            strm1
-    Stream.zipWith calVar (Stream.repeat s) strm2
-
-{-# INLINE jackKnifeStdDev #-}
-jackKnifeStdDev :: (Monad m, Storable a, Floating a) =>
-    Array a -> SerialT m a
-jackKnifeStdDev = Stream.map sqrt . jackKnifeVariance
