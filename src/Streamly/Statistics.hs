@@ -149,6 +149,9 @@ module Streamly.Statistics
     , sampleStdDev
     , stdErrMean
 
+    -- ** Resampling
+    , jackKnifeMean
+
     -- ** Histograms
     , HistBin (..)
     , binOffsetSize
@@ -156,15 +159,13 @@ module Streamly.Statistics
     , binFromToN
     , binBoundaries
     , histogram
-
-    , jackKnifeMean
     )
 where
 
 import Control.Exception (assert)
 import Control.Monad.IO.Class (MonadIO(..))
+import Data.Functor.Identity (runIdentity, Identity)
 import Data.Map.Strict (Map)
-import Data.Functor.Identity (runIdentity)
 import Foreign.Storable (Storable)
 import Streamly.Data.Fold.Tee(Tee(..), toFold)
 import Streamly.Internal.Data.Fold.Type (Fold(..), Step(..))
@@ -656,6 +657,28 @@ stdErrMean :: (Monad m, Floating a) => Fold m (a, Maybe a) a
 stdErrMean = Fold.teeWith (\sd n -> sd / sqrt n) sampleStdDev Window.length
 
 -------------------------------------------------------------------------------
+-- Resampling
+-------------------------------------------------------------------------------
+
+{-# INLINE foldArray #-}
+foldArray :: Storable a => Fold Identity a b -> Array a -> b
+foldArray f = runIdentity . Stream.fold f . toStream
+
+-- XXX Is this numerically stable? Should we keep the rounding error in the sum
+-- and take it into account when subtracting?
+--
+-- | Given an array of @n@ items, compute mean of @(n - 1)@ items at a time,
+-- producing a stream of all possible mean values omitting a different item
+-- every time.
+--
+{-# INLINE jackKnifeMean #-}
+jackKnifeMean :: (Monad m, Fractional a, Storable a) => Array a -> SerialT m a
+jackKnifeMean arr = do
+    let len = fromIntegral (length arr - 1)
+        s = foldArray Fold.sum arr
+     in Stream.map (\b -> (s - b) / len) $ toStream arr
+
+-------------------------------------------------------------------------------
 -- Histograms
 -------------------------------------------------------------------------------
 
@@ -742,12 +765,3 @@ binBoundaries = undefined
 {-# INLINE histogram #-}
 histogram :: (Monad m, Ord k) => (a -> k) -> Fold m a (Map k Int)
 histogram bin = Fold.classifyWith bin Fold.length
-
-{-# INLINE jackKnifeMean #-}
-jackKnifeMean :: (Monad m, Fractional a, Storable a) => Array a -> SerialT m a
-jackKnifeMean arr = do
-    let len = length arr - 1
-        s = runIdentity $ Stream.fold Fold.sum $ toStream arr
-    Stream.zipWith
-        (\sum b -> (sum - b) / fromIntegral len)
-        (Stream.repeat s) (toStream arr)
