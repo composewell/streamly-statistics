@@ -184,7 +184,7 @@ import Prelude hiding (length, sum, minimum, maximum)
 -- think about deduplication.
 
 -------------------------------------------------------------------------------
--- Utilities
+-- Mean
 -------------------------------------------------------------------------------
 
 -- | Arithmetic mean of elements in a sliding window:
@@ -210,6 +210,34 @@ import Prelude hiding (length, sum, minimum, maximum)
 mean :: forall m a. (Monad m, Fractional a) => Fold m (a, Maybe a) a
 mean = Window.mean
 
+-- | Recompute mean from old mean when an item is removed from the sample.
+{-# INLINE _meanSubtract #-}
+_meanSubtract :: Fractional a => Int -> a -> a -> a
+_meanSubtract n oldMean oldItem =
+    let delta = (oldItem - oldMean) / fromIntegral (n - 1)
+     in oldMean - delta
+
+-- | Recompute mean from old mean when an item is added to the sample.
+{-# INLINE meanAdd #-}
+meanAdd :: Fractional a => Int -> a -> a -> a
+meanAdd n oldMean newItem =
+    let delta = (newItem - oldMean) / fromIntegral (n + 1)
+     in oldMean + delta
+
+-- We do not carry rounding errors, therefore, this would be less numerically
+-- stable than the kbn mean.
+--
+-- | Recompute mean from old mean when an item in the sample is replaced.
+{-# INLINE meanReplace #-}
+meanReplace :: Fractional a => Int -> a -> a -> a -> a
+meanReplace n oldMean oldItem newItem =
+    let n1 = fromIntegral n
+        -- Compute two deltas instead of a single (newItem - oldItem) because
+        -- the latter would be too small causing rounding errors.
+        delta1 = (newItem - oldMean) / n1
+        delta2 = (oldItem - oldMean) / n1
+     in (oldMean + delta1) - delta2
+
 -- | Same as 'mean' but uses Welford's algorithm to compute the mean
 -- incrementally.
 --
@@ -231,23 +259,20 @@ welfordMean = Fold step initial extract
             $ Partial
             $ Tuple'
                 (0 :: a)   -- running mean
-                (0 :: Int) -- count of numbers in the window
+                (0 :: Int) -- count of items in the window
 
-    step (Tuple' x w) (y, my) =
+    step (Tuple' oldMean w) (new, mOld) =
         return
             $ Partial
-            $ case my of
-                Nothing ->
-                    let w1 = fromIntegral (w + 1)
-                     in Tuple' (x + (y - x) / w1) (w + 1)
-                Just old ->
-                    let w1 = fromIntegral w
-                    -- XXX can we use x + (y - old) / w1 ?
-                    -- XXX We can carry the rounding errors to provide
-                    -- numerical stability like in 'mean'.
-                     in Tuple' (x + (y - x) / w1 + (x - old) / w1) w
+            $ case mOld of
+                Nothing -> Tuple' (meanAdd w oldMean new) (w + 1)
+                Just old -> Tuple' (meanReplace w oldMean old new) w
 
     extract (Tuple' x _) = return x
+
+-------------------------------------------------------------------------------
+-- Moments
+-------------------------------------------------------------------------------
 
 -- XXX We may have chances of overflow if the powers are high or the numbers
 -- are large. A limited mitigation could be to use welford style avg
