@@ -133,6 +133,8 @@ module Streamly.Statistics
     , md
     , variance
     , stdDev
+    , frequency
+    , mode
 
     -- ** Shape
     -- | Third and fourth order central moments are a measure of shape.
@@ -167,7 +169,7 @@ where
 import Control.Exception (assert)
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.Functor.Identity (runIdentity, Identity)
-import Data.Map.Strict (Map)
+import Data.Map.Strict (Map, foldrWithKey)
 import Foreign.Storable (Storable)
 import Streamly.Data.Fold.Tee(Tee(..), toFold)
 import Streamly.Internal.Data.Array.Foreign.Type (Array, length, toStream)
@@ -175,9 +177,9 @@ import Streamly.Internal.Data.Fold.Type (Fold(..), Step(..))
 import Streamly.Internal.Data.Stream.IsStream (SerialT)
 import Streamly.Internal.Data.Tuple.Strict (Tuple'(..))
 
-import qualified Streamly.Internal.Data.Fold as Fold
 import qualified Streamly.Internal.Data.Array.Foreign as Array
 import qualified Streamly.Internal.Data.Array.Foreign.Mut as MA
+import qualified Streamly.Internal.Data.Fold as Fold
 import qualified Streamly.Internal.Data.Fold.Window as Window
 import qualified Streamly.Internal.Data.Stream.IsStream as Stream
 
@@ -788,3 +790,21 @@ binBoundaries = undefined
 {-# INLINE histogram #-}
 histogram :: (Monad m, Ord k) => (a -> k) -> Fold m a (Map k Int)
 histogram bin = Fold.classifyWith bin Fold.length
+
+{-# INLINE frequency #-}
+frequency :: (Monad m, Ord a) => Fold m a (Map a Int)
+frequency = Fold.classifyWith id Fold.length
+
+{-# INLINE mode #-}
+mode :: (Monad m, Ord a) => Fold m a (Maybe (a, Int))
+mode = Fold.rmapM getMax frequency
+
+    where
+
+    getMax map0 =
+        return $ foldrWithKey fmax Nothing map0
+
+    fmax k a Nothing = Just (k, a)
+    fmax k a (Just (k1, b1))
+        | a > b1 = Just (k, a)
+        | otherwise = Just (k1, b1)

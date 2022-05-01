@@ -1,12 +1,13 @@
 {-# LANGUAGE TupleSections #-}
 
+import Data.Functor.Classes (liftEq2)
 import Foreign (Storable)
 import Streamly.Internal.Data.Stream.IsStream (SerialT)
 
 import qualified Data.Map.Strict as Map
-import qualified Streamly.Internal.Data.Fold as Fold
 import qualified Streamly.Internal.Data.Array.Foreign.Mut as MA
 import qualified Streamly.Internal.Data.Array.Foreign.Type as Array
+import qualified Streamly.Internal.Data.Fold as Fold
 import qualified Streamly.Internal.Data.Ring.Foreign as Ring
 import qualified Streamly.Internal.Data.Stream.IsStream as Stream
 import qualified Streamly.Prelude as S
@@ -152,6 +153,16 @@ main = hspec $ do
                 it "Infinite" $ a  == sI
                 it ("Finite " ++ show winSize) $ b == sW
 
+            testFrequency tc res = do
+                let c = S.fromList tc
+                freq <- S.fold frequency c
+                it ("Frequency "++ show freq) $ liftEq2 (==) (==) freq res
+
+            testMode tc res = do
+                let c = S.fromList tc
+                mode0 <- S.fold mode c
+                it ("Mode "++ show mode0) $ mode0 == res
+
         describe "MD" $ testFuncMD md
         describe "Kurt" testFuncKurt
         describe "JackKnife Mean" $
@@ -160,6 +171,11 @@ main = hspec $ do
             testJackKnife jackKnifeVariance jackKnifeInput jackVarianceRes
         describe "JackKnife StdDev" $
             testJackKnife jackKnifeStdDev jackKnifeInput jackStdDevRes
+        describe "frequency" $ testFrequency [1::Int, 1, 2, 3, 3, 3]
+                                (Map.fromList [(1, 2), (2, 1), (3, 3)])
+        describe "Kurt" testFuncKurt
+        describe "Mode" $ testMode [1::Int, 1, 2, 3, 3, 3] (Just (3, 3))
+        describe "Mode Empty " $ testMode ([]::[Int]) Nothing
         describe "minimum" $ do
             let scanInf = [31, 31, 31, 26, 26, 26, 26] :: [Double]
                 scanWin = [31, 31, 31, 26, 26, 26, 53] :: [Double]
