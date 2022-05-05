@@ -112,7 +112,7 @@ test-suite test
                       , base           >= 4.9   && < 5
                       , QuickCheck     >= 2.10  && < 2.15
                       , hspec          >= 2.0   && < 3
-                      , hspec-core     >= 2.9.7
+                      , hspec-core     >= 2.0   && < 3
                       , random         >= 1.0.0 && < 2
                       , containers  >= 0.5   && < 0.7
 

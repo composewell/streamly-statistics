@@ -3,6 +3,7 @@
 import Data.Functor.Classes (liftEq2)
 import Foreign (Storable)
 import Streamly.Internal.Data.Stream.IsStream (SerialT)
+import Test.Hspec.Core.Spec (SpecM)
 
 import qualified Data.Map.Strict as Map
 import qualified Streamly.Internal.Data.Array.Foreign.Mut as MA
@@ -16,7 +17,6 @@ import Prelude hiding (sum, maximum, minimum)
 
 import Streamly.Statistics
 import Test.Hspec
-import Test.Hspec.Core.Spec
 
 jackKnifeInput :: [Double]
 jackKnifeInput = [1.0::Double, 2.0, 3.0, 4.0]
@@ -118,6 +118,16 @@ testFuncbinFromToN low high n x exp0 = do
         ++ " Actual is = "
         ++ show res) (res == exp0)
 
+testFrequency :: [Int] -> Map.Map Int Int -> Spec
+testFrequency inputList result = do
+    freq <- S.fold frequency $ S.fromList inputList
+    it ("Frequency " ++ show freq) $ liftEq2 (==) (==) freq result
+
+testMode :: [Int] -> Maybe (Int, Int) -> Spec
+testMode inputList res = do
+    mode0 <- S.fold mode $ S.fromList inputList
+    it ("Mode " ++ show mode0) $ mode0 == res
+
 main :: IO ()
 main = hspec $ do
     describe "Numerical stability while streaming" $ do
@@ -153,29 +163,26 @@ main = hspec $ do
                 it "Infinite" $ a  == sI
                 it ("Finite " ++ show winSize) $ b == sW
 
-            testFrequency tc res = do
-                let c = S.fromList tc
-                freq <- S.fold frequency c
-                it ("Frequency "++ show freq) $ liftEq2 (==) (==) freq res
-
-            testMode tc res = do
-                let c = S.fromList tc
-                mode0 <- S.fold mode c
-                it ("Mode "++ show mode0) $ mode0 == res
-
         describe "MD" $ testFuncMD md
         describe "Kurt" testFuncKurt
+
+        -- Resampling
         describe "JackKnife Mean" $
             testJackKnife jackKnifeMean jackKnifeInput jackMeanRes
         describe "JackKnife Variance" $ do
             testJackKnife jackKnifeVariance jackKnifeInput jackVarianceRes
         describe "JackKnife StdDev" $
             testJackKnife jackKnifeStdDev jackKnifeInput jackStdDevRes
-        describe "frequency" $ testFrequency [1::Int, 1, 2, 3, 3, 3]
-                                (Map.fromList [(1, 2), (2, 1), (3, 3)])
-        describe "Kurt" testFuncKurt
+
+        -- Probability Distribution
+        describe "frequency"
+            $ testFrequency
+                [1::Int, 1, 2, 3, 3, 3]
+                (Map.fromList [(1, 2), (2, 1), (3, 3)])
         describe "Mode" $ testMode [1::Int, 1, 2, 3, 3, 3] (Just (3, 3))
         describe "Mode Empty " $ testMode ([]::[Int]) Nothing
+
+        -- Spread/Mean
         describe "minimum" $ do
             let scanInf = [31, 31, 31, 26, 26, 26, 26] :: [Double]
                 scanWin = [31, 31, 31, 26, 26, 26, 53] :: [Double]

@@ -133,8 +133,6 @@ module Streamly.Statistics
     , md
     , variance
     , stdDev
-    , frequency
-    , mode
 
     -- ** Shape
     -- | Third and fourth order central moments are a measure of shape.
@@ -156,7 +154,11 @@ module Streamly.Statistics
     , jackKnifeVariance
     , jackKnifeStdDev
 
-    -- ** Histograms
+    -- ** Probability Distribution
+    , frequency
+    , mode
+
+    -- Histograms
     , HistBin (..)
     , binOffsetSize
     , binFromSizeN
@@ -704,6 +706,32 @@ jackKnifeStdDev :: (Monad m, Storable a, Floating a) =>
 jackKnifeStdDev = Stream.map sqrt . jackKnifeVariance
 
 -------------------------------------------------------------------------------
+-- Probability Distribution
+-------------------------------------------------------------------------------
+
+-- | Determine the frequency of each element in the stream.
+--
+{-# INLINE frequency #-}
+frequency :: (Monad m, Ord a) => Fold m a (Map a Int)
+frequency = Fold.classifyWith id Fold.length
+
+-- | Find out the most frequently ocurring element in the stream and its
+-- frequency.
+--
+{-# INLINE mode #-}
+mode :: (Monad m, Ord a) => Fold m a (Maybe (a, Int))
+mode = Fold.rmapM findMax frequency
+
+    where
+
+    fmax k v Nothing = Just (k, v)
+    fmax k v old@(Just (_, v1))
+        | v > v1 = Just (k, v)
+        | otherwise = old
+
+    findMax = return . foldrWithKey fmax Nothing
+
+-------------------------------------------------------------------------------
 -- Histograms
 -------------------------------------------------------------------------------
 
@@ -790,21 +818,3 @@ binBoundaries = undefined
 {-# INLINE histogram #-}
 histogram :: (Monad m, Ord k) => (a -> k) -> Fold m a (Map k Int)
 histogram bin = Fold.classifyWith bin Fold.length
-
-{-# INLINE frequency #-}
-frequency :: (Monad m, Ord a) => Fold m a (Map a Int)
-frequency = Fold.classifyWith id Fold.length
-
-{-# INLINE mode #-}
-mode :: (Monad m, Ord a) => Fold m a (Maybe (a, Int))
-mode = Fold.rmapM getMax frequency
-
-    where
-
-    getMax map0 =
-        return $ foldrWithKey fmax Nothing map0
-
-    fmax k a Nothing = Just (k, a)
-    fmax k a (Just (k1, b1))
-        | a > b1 = Just (k, a)
-        | otherwise = Just (k1, b1)
