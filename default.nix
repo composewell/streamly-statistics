@@ -41,15 +41,30 @@ let haskellPackages =
 
                     streamly =
                       nixpkgs.haskell.lib.overrideCabal
-                        (super.callHackageDirect
-                          { pkg = "streamly";
-                            ver = "0.8.2";
-                            sha256 = "sha256-CjFq9SCdbgLZa7NqOE4OtC8OaFg4vK8VmIDjGU5rGko=";
-                          } {})
-                        #(let src = fetchGit {
-                        #    url = "git@github.com:composewell/streamly.git";
-                        #    rev = "8df3dc4c70f3f4a2daa3b5cada7390e0c44e8394";
-                        #}; in super.callCabal2nix "streamly" src {})
+                        #(super.callHackageDirect
+                        #  { pkg = "streamly";
+                        #    ver = "0.8.2";
+                        #    sha256 = "sha256-CjFq9SCdbgLZa7NqOE4OtC8OaFg4vK8VmIDjGU5rGko=";
+                        #  } {})
+                        (let src = fetchGit {
+                             url = "git@github.com:composewell/streamly.git";
+                             rev = "a849812d9960d5b7868e770156ab774ee8f70157";
+                        }; in super.callCabal2nix "streamly" src {})
+                        (old:
+                          { librarySystemDepends =
+                              if builtins.currentSystem == "x86_64-darwin"
+                              then [nixpkgs.darwin.apple_sdk.frameworks.Cocoa]
+                              else [];
+                            enableLibraryProfiling = false;
+                            doHaddock = false;
+                          });
+
+                    streamly-core =
+                      nixpkgs.haskell.lib.overrideCabal
+                        (let src = fetchGit {
+                            url = "git@github.com:composewell/streamly.git";
+                            rev = "a849812d9960d5b7868e770156ab774ee8f70157";
+                        }; in super.callCabal2nix "streamly-core" "${src}/core" {})
                         (old:
                           { librarySystemDepends =
                               if builtins.currentSystem == "x86_64-darwin"
