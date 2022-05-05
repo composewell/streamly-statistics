@@ -132,6 +132,24 @@ testMode inputList res = do
 sampleList :: [Double]
 sampleList = [1.0, 2.0, 3.0, 4.0, 5.0]
 
+testResample :: [Double] -> Spec
+testResample sample = do
+    let sampleArr = Array.fromList sample
+        sampleSet = Set.fromList sample
+    resampleList <- runIO $ S.toList $ S.unfold resample sampleArr
+    let resampleSet = Set.fromList resampleList
+        sub = Set.isSubsetOf resampleSet sampleSet
+    -- XXX We should not use dynamic output in test description
+    it ("resample " ++ show resampleList)
+       (Prelude.length resampleList == Array.length sampleArr && sub)
+
+testFoldResamples :: Int -> [Double] -> Spec
+testFoldResamples n sample = do
+    let arr = Array.fromList sample
+    a <- runIO $ S.toList $ foldResamples n arr Fold.mean
+    -- XXX We should not use dynamic output in test description
+    it ("foldResamples " ++ show a) (Prelude.length a == n)
+
 main :: IO ()
 main = hspec $ do
     describe "Numerical stability while streaming" $ do
@@ -167,21 +185,6 @@ main = hspec $ do
                 it "Infinite" $ a  == sI
                 it ("Finite " ++ show winSize) $ b == sW
 
-            testFuncResample n tc = do
-                let arr = Array.fromList tc
-                a <- runIO $ S.toList $ resample n arr Fold.mean
-                it ("resample " ++ show a) (Prelude.length a == n)
-
-            testFuncResampleOne tc = do
-                let c = Array.fromList tc
-                    s = Set.fromList tc
-                    a = S.unfold resampleOne c
-                ls <- runIO $ S.toList a
-                let s' = Set.fromList ls
-                    sub = Set.isSubsetOf s' s
-                it ("resampleOne " ++ show ls)
-                    (Prelude.length ls == Array.length c && sub)
-
         describe "MD" $ testFuncMD md
         describe "Kurt" testFuncKurt
 
@@ -193,20 +196,12 @@ main = hspec $ do
         describe "JackKnife StdDev" $
             testJackKnife jackKnifeStdDev jackKnifeInput jackStdDevRes
 
-        -- Probability Distribution
-        describe "frequency"
-            $ testFrequency
-                [1::Int, 1, 2, 3, 3, 3]
-                (Map.fromList [(1, 2), (2, 1), (3, 3)])
-        describe "Mode" $ testMode [1::Int, 1, 2, 3, 3, 3] (Just (3, 3))
-        describe "Mode Empty " $ testMode ([]::[Int]) Nothing
-
-        describe "resampleOne" $ do
-            testFuncResampleOne sampleList
-        describe "resample 4" $ do
-            testFuncResample 4 sampleList
-        describe "resample 6" $ do
-            testFuncResample 6 sampleList
+        describe "resample" $ do
+            testResample sampleList
+        describe "foldResamples 4" $ do
+            testFoldResamples 4 sampleList
+        describe "foldResamples 6" $ do
+            testFoldResamples 6 sampleList
 
         -- Spread/Mean
         describe "minimum" $ do
@@ -233,6 +228,15 @@ main = hspec $ do
             let scanInf = [1, 1, 1, 1, 1, 2] :: [Double]
                 scanWin = [1, 1, 1, 1, 1, 3] :: [Double]
             testFunc testCase2 welfordMean scanInf scanWin
+
+        -- Probability Distribution
+        describe "frequency"
+            $ testFrequency
+                [1::Int, 1, 2, 3, 3, 3]
+                (Map.fromList [(1, 2), (2, 1), (3, 3)])
+        describe "Mode" $ testMode [1::Int, 1, 2, 3, 3, 3] (Just (3, 3))
+        describe "Mode Empty " $ testMode ([]::[Int]) Nothing
+
         describe "histogram" testFuncHistogram
         describe "binFromSizeN AboveRange" $
             testFuncbinFromSizeN (0::Int) 2 10 55 AboveRange
