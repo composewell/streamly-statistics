@@ -1,6 +1,11 @@
 {-# LANGUAGE TupleSections #-}
 
+import Foreign (Storable)
+import Streamly.Internal.Data.Stream.IsStream (SerialT)
+
 import qualified Data.Map.Strict as Map
+import qualified Streamly.Internal.Data.Fold as Fold
+import qualified Streamly.Internal.Data.Array.Foreign.Mut as MA
 import qualified Streamly.Internal.Data.Array.Foreign.Type as Array
 import qualified Streamly.Internal.Data.Ring.Foreign as Ring
 import qualified Streamly.Internal.Data.Stream.IsStream as Stream
@@ -8,8 +13,9 @@ import qualified Streamly.Prelude as S
 
 import Prelude hiding (sum, maximum, minimum)
 
-import Test.Hspec
 import Streamly.Statistics
+import Test.Hspec
+import Test.Hspec.Core.Spec
 
 jackKnifeInput :: [Double]
 jackKnifeInput = [1.0::Double, 2.0, 3.0, 4.0]
@@ -33,6 +39,84 @@ jackStdDevRes =
     , 0.8164965809277263
     ]
 
+testFuncMD :: (Storable a, Show a, Eq a, Fractional a) =>
+    Fold.Fold IO ((a, Maybe a), IO (MA.Array a)) a -> Spec
+testFuncMD f = do
+                let c = S.fromList [10.0, 11.0, 12.0, 14.0]
+                a1 <- runIO $ S.fold (Ring.slidingWindowWith 2 f) c
+                a2 <- runIO $ S.fold (Ring.slidingWindowWith 3 f) c
+                a3 <- runIO $ S.fold (Ring.slidingWindowWith 4 f) c
+                it ("MD should be 1.0 , 1.1111111111111114 , 1.25 but actual is "
+                    ++ show a1 ++ " " ++ show a2 ++ " " ++ show a3)
+                    (a1 == 1.0 && a2 == 1.1111111111111114 && a3 == 1.25)
+
+testFuncKurt :: Spec
+testFuncKurt = do
+    let c = S.fromList
+            [ 10.0 :: Double
+            , 11.0
+            , 12.0
+            , 14.0
+            , 10.0
+            , 11.0
+            , 12.0
+            , 14.0
+            ]
+    krt <- runIO $ S.fold (Ring.slidingWindow 3 kurtosis) c
+    it ( "kurtosis should be 1.5000000000007478 Actual is " ++
+        show krt
+        )
+        (krt == 1.5000000000007478)
+
+testJackKnife :: (Show a, Eq a, Storable a) =>
+       (Array.Array a -> SerialT (SpecM ()) a)
+    -> [a]
+    -> [a]
+    -> Spec
+testJackKnife f ls expRes = do
+    let arr = Array.fromList ls
+    res <- Stream.toList $ f arr
+    it ("testJackKnife result should be ="
+        ++ show expRes
+        ++ " Actual is = " ++show res
+        )
+        (res == expRes)
+
+testFuncHistogram :: Spec
+testFuncHistogram = do
+    let strm = S.fromList [1..15]
+    res <- runIO $
+        S.fold (histogram (binOffsetSize (0::Int) (3::Int))) strm
+    let expected = Map.fromList
+                    [ (0::Int, 2::Int)
+                    , (1, 3)
+                    , (2, 3)
+                    , (3, 3)
+                    , (4, 3)
+                    , (5, 1)
+                    ]
+
+    it ("Map should be = "
+        ++ show expected
+        ++ " Actual is = "
+        ++ show res) (expected == res)
+
+testFuncbinFromSizeN :: Int -> Int -> Int -> Int -> HistBin Int -> SpecWith (Arg Bool)
+testFuncbinFromSizeN low binSize nbins x exp0 = do
+    let res = binFromSizeN low binSize nbins x
+    it ("Bin should be = "
+        ++ show exp0
+        ++ " Actual is = "
+        ++ show res) (res == exp0)
+
+testFuncbinFromToN :: Int -> Int -> Int -> Int -> HistBin Int -> SpecWith ()
+testFuncbinFromToN low high n x exp0 = do
+    let res = binFromToN low high n x
+    it ("Bin should be = "
+        ++ show exp0
+        ++ " Actual is = "
+        ++ show res) (res == exp0)
+
 main :: IO ()
 main = hspec $ do
     describe "Numerical stability while streaming" $ do
@@ -51,16 +135,6 @@ main = hspec $ do
                 it ("should not deviate more than " ++ show deviationLimit)
                     $ c1 >= -1 * deviationLimit && c1 <= deviationLimit
 
-            testFunc2 f = do
-                let c = S.fromList [10.0, 11.0, 12.0, 14.0]
-                a1 <- runIO $ S.fold (Ring.slidingWindowWith 2 f) c
-                a2 <- runIO $ S.fold (Ring.slidingWindowWith 3 f) c
-                a3 <- runIO $ S.fold (Ring.slidingWindowWith 4 f) c
-                it ("MD should be 1.0 , 1.1111111111111114 , 1.25 but actual is "
-                    ++ show a1 ++ " " ++ show a2 ++ " " ++ show a3)
-                    (a1 == 1.0 && a2 == 1.1111111111111114 && a3 == 1.25)
-
-        describe "MD" $ testFunc2 md
         describe "Sum" $ testFunc sum
         describe "mean" $ testFunc mean
         describe "welfordMean" $ testFunc welfordMean
@@ -78,64 +152,7 @@ main = hspec $ do
                 it "Infinite" $ a  == sI
                 it ("Finite " ++ show winSize) $ b == sW
 
-            testFuncKurt = do
-                let c = S.fromList
-                        [ 10.0 :: Double
-                        , 11.0
-                        , 12.0
-                        , 14.0
-                        , 10.0
-                        , 11.0
-                        , 12.0
-                        , 14.0
-                        ]
-                krt <- runIO $ S.fold (Ring.slidingWindow 3 kurtosis) c
-                it ( "kurtosis should be 1.5000000000007478 Actual is " ++
-                    show krt
-                   )
-                   (krt == 1.5000000000007478)
-
-            testJackKnife f ls expRes = do
-                let arr = Array.fromList ls
-                res <- Stream.toList $ f arr
-                it ("testJackKnife result should be ="
-                    ++ show expRes
-                    ++ " Actual is = " ++show res
-                    )
-                    (res == expRes)
-
-            testFuncHistogram = do
-                let strm = S.fromList [1..15]
-                res <- runIO $
-                    S.fold (histogram (binOffsetSize (0::Int) (3::Int))) strm
-                let expected = Map.fromList
-                                [ (0::Int, 2::Int)
-                                , (1, 3)
-                                , (2, 3)
-                                , (3, 3)
-                                , (4, 3)
-                                , (5, 1)
-                                ]
-
-                it ("Map should be = "
-                    ++ show expected
-                    ++ " Actual is = "
-                    ++ show res) (expected == res)
-
-            testFuncbinFromSizeN low binSize nbins x exp0 = do
-                let res = binFromSizeN low binSize nbins x
-                it ("Bin should be = "
-                    ++ show exp0
-                    ++ " Actual is = "
-                    ++ show res) (res == exp0)
-
-            testFuncbinFromToN low high n x exp0 = do
-                let res = binFromToN low high n x
-                it ("Bin should be = "
-                    ++ show exp0
-                    ++ " Actual is = "
-                    ++ show res) (res == exp0)
-
+        describe "MD" $ testFuncMD md
         describe "Kurt" testFuncKurt
         describe "JackKnife Mean" $
             testJackKnife jackKnifeMean jackKnifeInput jackMeanRes
