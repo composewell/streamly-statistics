@@ -1,6 +1,7 @@
 {-# LANGUAGE TupleSections #-}
 
 import Control.Monad.IO.Class (liftIO)
+import Data.Complex (Complex ((:+)))
 import Data.Functor.Classes (liftEq2)
 import Foreign (Storable)
 import Streamly.Internal.Data.Stream.IsStream (SerialT)
@@ -12,7 +13,9 @@ import Test.QuickCheck.Monadic (monadicIO, assert)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Vector as V
+import qualified Data.Vector.Generic as G
 import qualified Statistics.Sample.Powers as STAT
+import qualified Statistics.Transform as STAT
 import qualified Streamly.Internal.Data.Array.Foreign.Mut as MA
 import qualified Streamly.Internal.Data.Array.Foreign.Type as Array
 import qualified Streamly.Internal.Data.Fold as Fold
@@ -158,6 +161,18 @@ testMode inputList res = do
     mode0 <- S.fold mode $ S.fromList inputList
     it ("Mode " ++ show mode0) $ mode0 == res
 
+vec :: G.Vector v STAT.CD => v STAT.CD
+vec = G.generate 4 (\i -> (fromIntegral i :+ 0) :: STAT.CD)
+
+testFFT :: [Complex Double] -> Spec
+testFFT tc = do
+                let vr = V.toList (STAT.fft vec :: V.Vector STAT.CD)
+                marr <- runIO $ MA.fromList tc
+                runIO $ fft marr
+                ls <- runIO $ MA.toList marr
+                it ("fft should be "++ show vr ++ " Actual is " ++ show ls) $
+                    vr == ls
+
 sampleList :: [Double]
 sampleList = [1.0, 2.0, 3.0, 4.0, 5.0]
 
@@ -214,9 +229,6 @@ main = hspec $ do
                 it "Infinite" $ a  == sI
                 it ("Finite " ++ show winSize) $ b == sW
 
-        describe "MD" $ testFuncMD md
-        describe "Kurt" testFuncKurt
-
         -- Resampling
         describe "JackKnife Mean" $
             testJackKnife jackKnifeMean jackKnifeInput jackMeanRes
@@ -233,6 +245,13 @@ main = hspec $ do
             testFoldResamples 6 sampleList
 
         -- Spread/Mean
+        describe "MD" $ testFuncMD md
+        describe "Kurt" testFuncKurt
+        describe "fft" $ testFFT [ (0.0 :+ 0) :: Complex Double
+                                  , 1.0 :+ 0
+                                  , 2.0 :+ 0
+                                  , 3.0 :+ 0
+                                  ]
         describe "minimum" $ do
             let scanInf = [31, 31, 31, 26, 26, 26, 26] :: [Double]
                 scanWin = [31, 31, 31, 26, 26, 26, 53] :: [Double]

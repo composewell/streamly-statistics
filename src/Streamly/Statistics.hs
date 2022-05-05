@@ -142,6 +142,7 @@ module Streamly.Statistics
     -- See https://en.wikipedia.org/wiki/Standardized_moment .
     , skewness
     , kurtosis
+    , fft
 
     -- XXX Move to Statistics.Sample or Statistics.Estimation module?
     -- ** Estimation
@@ -171,8 +172,11 @@ module Streamly.Statistics
 where
 
 import Control.Exception (assert)
+import Control.Monad (when)
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.Functor.Identity (runIdentity, Identity)
+import Data.Bits (Bits(shiftL, shiftR, (.&.), (.|.)))
+import Data.Complex (Complex ((:+)))
 import Data.Map.Strict (Map, foldrWithKey)
 import Foreign.Storable (Storable)
 import Streamly.Data.Fold.Tee(Tee(..), toFold)
@@ -194,6 +198,73 @@ import qualified Streamly.Internal.Data.Stream.IsStream as Stream
 import qualified Streamly.Internal.Data.Unfold as Unfold
 
 import Prelude hiding (length, sum, minimum, maximum)
+
+-- | Compute the logarithm in base 2 of the given value.
+{-# INLINE log2 #-}
+log2 :: Int -> Int
+log2 v0
+    | v0 <= 0   = error $ "log2: nonpositive input, got " ++ show v0
+    | otherwise = go 5 0 v0
+  where
+    go !i !r !v | i == -1 = r
+                | v .&. b i /= 0 =
+                    let si = Array.unsafeIndex i sv
+                      in go (i-1) (r .|. si) (v `shiftR` si)
+                | otherwise = go (i-1) r v
+    b = flip Array.unsafeIndex bv
+    !bv = Array.fromList
+            [ 0x02
+            , 0x0c
+            , 0xf0
+            , 0xff00
+            , fromIntegral (0xffff0000 :: Word)
+            , fromIntegral (0xffffffff00000000 :: Word)
+            ]
+    !sv = Array.fromList [1,2,4,8,16,32]
+
+{-# INLINE isPower2 #-}
+isPower2 :: Int -> Bool
+isPower2 n = n .&. (n - 1) == 0
+
+{-# INLINE fft #-}
+fft :: MonadIO m => MA.Array (Complex Double) -> m ()
+fft marr
+    | isPower2 len = bitReverse 0 0
+    | otherwise  = error "fft: Array length must be power of 2"
+
+    where
+
+    bitReverse i j
+        | i == len - 1 = stage 0 1
+        | otherwise = do
+            when (i < j) $ MA.unsafeSwapIndices i j marr
+            let inner k l | k <= l  = inner (k `shiftR` 1) (l - k)
+                          | otherwise = bitReverse (i + 1) (l + k)
+            inner (len `shiftR` 1) j
+
+    stage l !l1 | l == m = return ()
+                | otherwise = do
+        let !l2 = l1 `shiftL` 1
+            !e  = -6.283185307179586/fromIntegral l2
+            flight j !a | j == l1   = stage (l+1) l2
+                        | otherwise = do
+                let butterfly i | i >= len  = flight (j + 1) (a + e)
+                                | otherwise = do
+                        let i1 = i + l1
+                        xi1 :+ yi1 <- MA.getIndexUnsafe i1 marr
+                        let !c = cos a
+                            !s = sin a
+                            d  = (c * xi1 - s * yi1) :+ (s * xi1 + c * yi1)
+                        ci <- MA.getIndexUnsafe i marr
+                        MA.putIndexUnsafe  i1 (ci - d) marr
+                        MA.putIndexUnsafe  i (ci + d) marr
+                        butterfly (i + l2)
+                butterfly j
+        flight 0 0
+
+    len = MA.length marr
+
+    m = log2 len
 
 -- TODO: Overflow checks. Would be good if we can directly replace the
 -- operations with overflow checked operations.
