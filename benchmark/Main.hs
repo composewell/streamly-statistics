@@ -6,7 +6,9 @@ import Streamly.Prelude (SerialT)
 import System.Random (randomRIO)
 
 import qualified Streamly.Data.Fold as Fold
+import qualified Streamly.Internal.Data.Array.Foreign.Type as Array
 import qualified Streamly.Internal.Data.Ring.Foreign as Ring
+import qualified Streamly.Internal.Data.Stream.IsStream.Type as S
 import qualified Streamly.Prelude as Stream
 import qualified Streamly.Statistics as Statistics
 
@@ -52,6 +54,20 @@ benchWithPostscan :: Int -> String -> Fold IO Double Double -> Benchmark
 benchWithPostscan len name f =
   bench name $ nfIO $ randomRIO (1, 1) >>=
     Stream.drain . Stream.postscan f . source len
+
+{-# INLINE benchWithResample #-}
+benchWithResample :: Int -> String -> Benchmark
+benchWithResample len name = bench name $ nfIO $ do
+    i <- randomRIO (1, 1)
+    arr <- Array.fromStreamD (S.toStreamD (source len i :: SerialT IO Double))
+    Stream.drain $ Stream.unfold Statistics.resample arr
+
+{-# INLINE benchWithFoldResamples #-}
+benchWithFoldResamples :: Int -> String -> Fold IO Double Double -> Benchmark
+benchWithFoldResamples len name f = bench name $ nfIO $ do
+    i <- randomRIO (1, 1)
+    arr <- Array.fromStreamD (S.toStreamD (source len i :: SerialT IO Double))
+    Stream.drain $ Statistics.foldResamples len arr f
 
 {-# INLINE numElements #-}
 numElements :: Int
@@ -252,5 +268,9 @@ main =
             numElements
             "md (window size 100)"
             (Ring.slidingWindowWith 100 Statistics.md)
+        -- XXX These benchmarks measure the cost of creating the array as well,
+        -- we can do that outside the benchmark.
+        , benchWithResample numElements "Resample"
+        , benchWithFoldResamples 316 "FoldResamples 316" Fold.mean
         ]
     ]
