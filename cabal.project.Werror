@@ -12,3 +12,6 @@ source-repository-package
     subdir: core
 
 jobs: 1
+
+package streamly-statistics
+    ghc-options: -Werror
