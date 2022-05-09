@@ -25,6 +25,12 @@ import Prelude hiding (sum, maximum, minimum)
 import Streamly.Statistics
 import Test.Hspec
 
+tolerance :: Double
+tolerance = 0.00001
+
+validate :: Double -> Bool
+validate delta  = delta < tolerance
+
 jackKnifeInput :: [Double]
 jackKnifeInput = [1.0::Double, 2.0, 3.0, 4.0]
 
@@ -60,7 +66,7 @@ testDistributions func fld =
                     strm = S.fromList ls
                 var1 <-
                     liftIO $ S.fold (Ring.slidingWindow list_length fld) strm
-                assert (abs (var1 - var2) < 0.00001)
+                assert (validate $ abs (var1 - var2))
 
 testVariance :: Property
 testVariance = testDistributions STAT.variance variance
@@ -68,8 +74,8 @@ testVariance = testDistributions STAT.variance variance
 testStdDev :: Property
 testStdDev = testDistributions STAT.stdDev stdDev
 
-testFuncMD :: (Storable a, Show a, Eq a, Fractional a) =>
-    Fold.Fold IO ((a, Maybe a), IO (MA.Array a)) a -> Spec
+testFuncMD ::
+    Fold.Fold IO ((Double, Maybe Double), IO (MA.Array Double)) Double -> Spec
 testFuncMD f = do
                 let c = S.fromList [10.0, 11.0, 12.0, 14.0]
                 a1 <- runIO $ S.fold (Ring.slidingWindowWith 2 f) c
@@ -77,7 +83,10 @@ testFuncMD f = do
                 a3 <- runIO $ S.fold (Ring.slidingWindowWith 4 f) c
                 it ("MD should be 1.0 , 1.1111111111111114 , 1.25 but actual is "
                     ++ show a1 ++ " " ++ show a2 ++ " " ++ show a3)
-                    (a1 == 1.0 && a2 == 1.1111111111111114 && a3 == 1.25)
+                    (  validate (abs (a1 - 1.0))
+                    && validate (abs (a2 - 1.1111111))
+                    && validate (abs (a3 - 1.25))
+                    )
 
 testFuncKurt :: Spec
 testFuncKurt = do
@@ -87,7 +96,8 @@ testFuncKurt = do
     it ( "kurtosis should be 1.2762447351370185 Actual is " ++
         show krt
         )
-        (krt == 1.2762447351370185)
+
+        (validate $ abs (krt - 1.2762447))
 
 testJackKnife :: (Show a, Eq a, Storable a) =>
        (Array.Array a -> SerialT (SpecM ()) a)
