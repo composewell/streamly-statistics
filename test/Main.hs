@@ -1,12 +1,18 @@
 {-# LANGUAGE TupleSections #-}
 
+import Control.Monad.IO.Class (liftIO)
 import Data.Functor.Classes (liftEq2)
 import Foreign (Storable)
 import Streamly.Internal.Data.Stream.IsStream (SerialT)
 import Test.Hspec.Core.Spec (SpecM)
+import Test.Hspec.QuickCheck (prop)
+import Test.QuickCheck (chooseInt, choose, forAll, Property, vectorOf)
+import Test.QuickCheck.Monadic (monadicIO, assert)
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import qualified Data.Vector as V
+import qualified Statistics.Sample.Powers as STAT
 import qualified Streamly.Internal.Data.Array.Foreign.Mut as MA
 import qualified Streamly.Internal.Data.Array.Foreign.Type as Array
 import qualified Streamly.Internal.Data.Fold as Fold
@@ -41,6 +47,27 @@ jackStdDevRes =
     , 0.8164965809277263
     ]
 
+testDistributions
+    :: (STAT.Powers -> Double)
+    -> Fold.Fold IO (Double, Maybe Double) Double
+    -> Property
+testDistributions func fld =
+    forAll (chooseInt (1, 1000)) $ \list_length ->
+        forAll (vectorOf list_length (choose (-50.0 :: Double, 100.0)))
+            $ \ls ->
+                monadicIO $ do
+                let var2 = func . STAT.powers 2 $ V.fromList ls
+                    strm = S.fromList ls
+                var1 <-
+                    liftIO $ S.fold (Ring.slidingWindow list_length fld) strm
+                assert (abs (var1 - var2) < 0.00001)
+
+testVariance :: Property
+testVariance = testDistributions STAT.variance variance
+
+testStdDev :: Property
+testStdDev = testDistributions STAT.stdDev stdDev
+
 testFuncMD :: (Storable a, Show a, Eq a, Fractional a) =>
     Fold.Fold IO ((a, Maybe a), IO (MA.Array a)) a -> Spec
 testFuncMD f = do
@@ -55,20 +82,12 @@ testFuncMD f = do
 testFuncKurt :: Spec
 testFuncKurt = do
     let c = S.fromList
-            [ 10.0 :: Double
-            , 11.0
-            , 12.0
-            , 14.0
-            , 10.0
-            , 11.0
-            , 12.0
-            , 14.0
-            ]
-    krt <- runIO $ S.fold (Ring.slidingWindow 3 kurtosis) c
-    it ( "kurtosis should be 1.5000000000007478 Actual is " ++
+            [21.3 :: Double, 38.4, 12.7, 41.6]
+    krt <- runIO $ S.fold (Ring.slidingWindow 4 kurtosis) c
+    it ( "kurtosis should be 1.2762447351370185 Actual is " ++
         show krt
         )
-        (krt == 1.5000000000007478)
+        (krt == 1.2762447351370185)
 
 testJackKnife :: (Show a, Eq a, Storable a) =>
        (Array.Array a -> SerialT (SpecM ()) a)
@@ -254,3 +273,5 @@ main = hspec $ do
             testFuncbinFromToN (0::Int) 49 10 19 (InRange 3)
         describe "binFromToN AboveRange" $
             testFuncbinFromToN (0::Int) 50 10 20 (InRange 4)
+        prop "variance" testVariance
+        prop "stdDev" testStdDev
