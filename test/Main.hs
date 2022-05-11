@@ -7,13 +7,13 @@ import Foreign (Storable)
 import Streamly.Internal.Data.Stream.IsStream (SerialT)
 import Test.Hspec.Core.Spec (SpecM)
 import Test.Hspec.QuickCheck (prop)
-import Test.QuickCheck (chooseInt, choose, forAll, Property, vectorOf)
+import Test.QuickCheck
+    (elements, chooseInt, choose, forAll, Property, vectorOf)
 import Test.QuickCheck.Monadic (monadicIO, assert)
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Vector as V
-import qualified Data.Vector.Generic as G
 import qualified Statistics.Sample.Powers as STAT
 import qualified Statistics.Transform as STAT
 import qualified Streamly.Internal.Data.Array.Foreign.Mut as MA
@@ -161,17 +161,20 @@ testMode inputList res = do
     mode0 <- S.fold mode $ S.fromList inputList
     it ("Mode " ++ show mode0) $ mode0 == res
 
-vec :: G.Vector v STAT.CD => v STAT.CD
-vec = G.generate 4 (\i -> (fromIntegral i :+ 0) :: STAT.CD)
-
-testFFT :: [Complex Double] -> Spec
-testFFT tc = do
-                let vr = V.toList (STAT.fft vec :: V.Vector STAT.CD)
-                marr <- runIO $ MA.fromList tc
-                runIO $ fft marr
-                ls <- runIO $ MA.toList marr
-                it ("fft should be "++ show vr ++ " Actual is " ++ show ls) $
-                    vr == ls
+testFFT :: Property
+testFFT = do
+    let lengths = [2, 4, 8, 16]
+    forAll (elements lengths) $ \list_length ->
+        forAll (vectorOf list_length (choose (-50.0 :: Double, 100.0)))
+            $ \ls ->
+                monadicIO $ do
+                    let tc = map (\x -> x :+ 0) ls
+                    let vr = V.toList (STAT.fft (V.fromList tc)
+                                        :: V.Vector STAT.CD)
+                    marr <- MA.fromList tc
+                    fft marr
+                    res <- MA.toList marr
+                    assert (vr == res)
 
 sampleList :: [Double]
 sampleList = [1.0, 2.0, 3.0, 4.0, 5.0]
@@ -247,11 +250,7 @@ main = hspec $ do
         -- Spread/Mean
         describe "MD" $ testFuncMD md
         describe "Kurt" testFuncKurt
-        describe "fft" $ testFFT [ (0.0 :+ 0) :: Complex Double
-                                  , 1.0 :+ 0
-                                  , 2.0 :+ 0
-                                  , 3.0 :+ 0
-                                  ]
+        prop "fft" testFFT
         describe "minimum" $ do
             let scanInf = [31, 31, 31, 26, 26, 26, 26] :: [Double]
                 scanWin = [31, 31, 31, 26, 26, 26, 53] :: [Double]
