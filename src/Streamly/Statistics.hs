@@ -142,7 +142,6 @@ module Streamly.Statistics
     -- See https://en.wikipedia.org/wiki/Standardized_moment .
     , skewness
     , kurtosis
-    , fft
 
     -- XXX Move to Statistics.Sample or Statistics.Estimation module?
     -- ** Estimation
@@ -168,6 +167,9 @@ module Streamly.Statistics
     , binFromToN
     , binBoundaries
     , histogram
+
+    -- * Transforms
+    , fft
     )
 where
 
@@ -175,7 +177,7 @@ import Control.Exception (assert)
 import Control.Monad (when)
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.Functor.Identity (runIdentity, Identity)
-import Data.Bits (Bits(shiftL, shiftR, (.&.), (.|.)))
+import Data.Bits (Bits(complement, shiftL, shiftR, (.&.), (.|.)))
 import Data.Complex (Complex ((:+)))
 import Data.Map.Strict (Map, foldrWithKey)
 import Foreign.Storable (Storable)
@@ -199,73 +201,6 @@ import qualified Streamly.Internal.Data.Unfold as Unfold
 
 import Prelude hiding (length, sum, minimum, maximum)
 
--- | Compute the logarithm in base 2 of the given value.
-{-# INLINE log2 #-}
-log2 :: Int -> Int
-log2 v0
-    | v0 <= 0   = error $ "log2: nonpositive input, got " ++ show v0
-    | otherwise = go 5 0 v0
-  where
-    go !i !r !v | i == -1 = r
-                | v .&. b i /= 0 =
-                    let si = Array.unsafeIndex i sv
-                      in go (i-1) (r .|. si) (v `shiftR` si)
-                | otherwise = go (i-1) r v
-    b = flip Array.unsafeIndex bv
-    !bv = Array.fromList
-            [ 0x02
-            , 0x0c
-            , 0xf0
-            , 0xff00
-            , fromIntegral (0xffff0000 :: Word)
-            , fromIntegral (0xffffffff00000000 :: Word)
-            ]
-    !sv = Array.fromList [1,2,4,8,16,32]
-
-{-# INLINE isPower2 #-}
-isPower2 :: Int -> Bool
-isPower2 n = n .&. (n - 1) == 0
-
-{-# INLINE fft #-}
-fft :: MonadIO m => MA.Array (Complex Double) -> m ()
-fft marr
-    | isPower2 len = bitReverse 0 0
-    | otherwise  = error "fft: Array length must be power of 2"
-
-    where
-
-    bitReverse i j
-        | i == len - 1 = stage 0 1
-        | otherwise = do
-            when (i < j) $ MA.unsafeSwapIndices i j marr
-            let inner k l | k <= l  = inner (k `shiftR` 1) (l - k)
-                          | otherwise = bitReverse (i + 1) (l + k)
-            inner (len `shiftR` 1) j
-
-    stage l !l1 | l == m = return ()
-                | otherwise = do
-        let !l2 = l1 `shiftL` 1
-            !e  = -6.283185307179586/fromIntegral l2
-            flight j !a | j == l1   = stage (l+1) l2
-                        | otherwise = do
-                let butterfly i | i >= len  = flight (j + 1) (a + e)
-                                | otherwise = do
-                        let i1 = i + l1
-                        xi1 :+ yi1 <- MA.getIndexUnsafe i1 marr
-                        let !c = cos a
-                            !s = sin a
-                            d  = (c * xi1 - s * yi1) :+ (s * xi1 + c * yi1)
-                        ci <- MA.getIndexUnsafe i marr
-                        MA.putIndexUnsafe  i1 (ci - d) marr
-                        MA.putIndexUnsafe  i (ci + d) marr
-                        butterfly (i + l2)
-                butterfly j
-        flight 0 0
-
-    len = MA.length marr
-
-    m = log2 len
-
 -- TODO: Overflow checks. Would be good if we can directly replace the
 -- operations with overflow checked operations.
 --
@@ -274,6 +209,107 @@ fft marr
 --
 -- TODO We have many of these functions in Streamly.Data.Fold as well. Need to
 -- think about deduplication.
+
+-------------------------------------------------------------------------------
+-- Transforms
+-------------------------------------------------------------------------------
+
+-- XXX These utility functions can be moved to streamly-numeric
+
+-- | Test if the given integer value is a power of 2.
+{-# INLINE isPower2 #-}
+isPower2 :: Int -> Bool
+isPower2 n = n .&. (n - 1) == 0
+
+-- | Create a power of 2
+--
+-- Argument must be less than 64 assuming 64-bit Int size.
+--
+{-# INLINE _power2 #-}
+_power2 :: Int -> Int
+_power2 n = shiftL 1 n
+
+-- | Create a bit mask with lower n bits 0 and the rest as 1.
+--
+-- Argument must be less than 64 assuming 64-bit Int size.
+--
+{-# INLINE maskLowerN #-}
+maskLowerN :: Int -> Int
+maskLowerN n = complement (shiftL 1 n - 1)
+
+-- | Compute the base 2 logarithm of the given value.
+--
+-- Assumes the Int size to be 64-bit.
+--
+{-# INLINE logBase2 #-}
+logBase2 :: Int -> Int
+logBase2 v0
+    | v0 <= 0   = error $ "logBase2: input must be greater than 0 " ++ show v0
+    | otherwise = go 32 0 v0
+
+    where
+
+    go !bits !result !v
+        | bits == 0 = result
+        | v .&. maskLowerN bits /= 0 =
+             go (bits `shiftR` 1) (result .|. bits) (v `shiftR` bits)
+        | otherwise = go (bits `shiftR` 1) result v
+
+-- Algo translated from the statistics library.
+--
+-- XXX We can use a wrapper API that takes an array of Double input instead of
+-- array of Complex.
+--
+-- | Compute fast fourier transform of an array of 'Complex' values.
+--
+-- Array length must be power of 2.
+--
+{-# INLINE fft #-}
+fft :: MonadIO m => MA.Array (Complex Double) -> m ()
+fft marr
+    | isPower2 len = bitReverse 0 0
+    | otherwise  = error "fft: Array length must be power of 2"
+
+    where
+
+    len = MA.length marr
+
+    halve x = x `shiftR` 1
+
+    twice x = x `shiftL` 1
+
+    inner i j k
+        | k <= j  = inner i (j - k) (halve k)
+        | otherwise = bitReverse (i + 1) (j + k)
+
+    bitReverse i j
+        | i == len - 1 = stage 0 1
+        | otherwise = do
+            when (i < j) $ MA.unsafeSwapIndices i j marr
+            inner i j (halve len)
+
+    log2len = logBase2 len
+
+    stage l !l1
+        | l == log2len = return ()
+        | otherwise = do
+            let !l2 = twice l1
+                !e  = -6.283185307179586/fromIntegral l2
+                flight j !a | j == l1   = stage (l + 1) l2
+                            | otherwise = do
+                    let butterfly i | i >= len  = flight (j + 1) (a + e)
+                                    | otherwise = do
+                            let i1 = i + l1
+                            xi1 :+ yi1 <- MA.getIndexUnsafe i1 marr
+                            let !c = cos a
+                                !s = sin a
+                                d  = (c * xi1 - s * yi1) :+ (s * xi1 + c * yi1)
+                            ci <- MA.getIndexUnsafe i marr
+                            MA.putIndexUnsafe  i1 (ci - d) marr
+                            MA.putIndexUnsafe  i (ci + d) marr
+                            butterfly (i + l2)
+                    butterfly j
+            flight 0 0
 
 -------------------------------------------------------------------------------
 -- Mean
