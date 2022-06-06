@@ -96,8 +96,8 @@ module Streamly.Statistics
     -- | See https://en.wikipedia.org/wiki/Location_parameter .
     --
     -- See https://en.wikipedia.org/wiki/Central_tendency .
-    , Window.minimum
-    , Window.maximum
+    , min
+    , max
     , rawMoment
     , rawMomentFrac
 
@@ -129,7 +129,7 @@ module Streamly.Statistics
     -- See https://mathworld.wolfram.com/CentralMoment.html .
     --
     -- See https://en.wikipedia.org/wiki/Statistical_dispersion .
-    , Window.range
+    , range
     , md
     , variance
     , stdDev
@@ -172,6 +172,8 @@ where
 
 import Control.Exception (assert)
 import Control.Monad.IO.Class (MonadIO(..))
+import Data.Function ((&))
+import Data.Maybe (fromMaybe)
 import Data.Functor.Identity (runIdentity, Identity)
 import Data.Map.Strict (Map, foldrWithKey)
 import Foreign.Storable (Storable)
@@ -182,10 +184,12 @@ import Streamly.Internal.Data.Array.Foreign.Type
 import Streamly.Internal.Data.Fold.Type (Fold(..), Step(..))
 import Streamly.Internal.Data.Stream.IsStream (SerialT)
 import Streamly.Internal.Data.Stream.StreamD.Step (Step(..))
-import Streamly.Internal.Data.Tuple.Strict (Tuple'(..))
+import Streamly.Internal.Data.Tuple.Strict (Tuple'(..), Tuple3'(..))
 import Streamly.Internal.Data.Unfold.Type (Unfold(..))
 import System.Random.MWC (createSystemRandom, uniformRM)
 
+import qualified Deque.Strict as DQ
+import qualified Prelude
 import qualified Streamly.Internal.Data.Array.Foreign as Array
 import qualified Streamly.Internal.Data.Array.Foreign.Mut as MA
 import qualified Streamly.Internal.Data.Fold as Fold
@@ -193,7 +197,7 @@ import qualified Streamly.Internal.Data.Fold.Window as Window
 import qualified Streamly.Internal.Data.Stream.IsStream as Stream
 import qualified Streamly.Internal.Data.Unfold as Unfold
 
-import Prelude hiding (length, sum, minimum, maximum)
+import Prelude hiding (length, sum, min, max)
 
 -- TODO: Overflow checks. Would be good if we can directly replace the
 -- operations with overflow checked operations.
@@ -203,6 +207,116 @@ import Prelude hiding (length, sum, minimum, maximum)
 --
 -- TODO We have many of these functions in Streamly.Data.Fold as well. Need to
 -- think about deduplication.
+
+-------------------------------------------------------------------------------
+-- Location
+-------------------------------------------------------------------------------
+
+-- Theoretically, we can approximate minimum in a rolling window by using a
+-- 'powerMean' with sufficiently large negative power.
+--
+-- XXX If we need to know the minimum in the window only once in a while then
+-- we can use linear search when it is extracted and not pay the cost all the
+-- time.
+--
+-- | The minimum element in a rolling window.
+--
+-- If you want to compute the min of the entire stream Fold.min from streamly
+-- package would be much faster.
+--
+-- /Time/: \(\mathcal{O}(n*w)\) where \(w\) is the window size.
+--
+{-# INLINE min #-}
+min :: (Monad m, Ord a) => Fold m (a, Maybe a) a
+min = Fold step initial extract
+
+    where
+
+    initial = return $ Partial $ Tuple3' (0 :: Int) (0 :: Int)
+                (mempty :: DQ.Deque (Int, a))
+
+    step (Tuple3' i w q) (a, ma) =
+        case ma of
+            Nothing ->
+                return $ Partial $ Tuple3' (i + 1) (w + 1)
+                    (headCheck i q (w + 1) & dqloop (i, a))
+            Just _ ->
+                return $ Partial $ Tuple3' (i + 1) w
+                    (headCheck i q w & dqloop (i,a))
+
+    {-# INLINE headCheck #-}
+    headCheck i q w =
+        case DQ.uncons q of
+            Nothing -> q
+            Just (ia', q') ->
+                if fst ia' <= i - w
+                then q'
+                else q
+
+    dqloop ia q =
+        case DQ.unsnoc q of
+            Nothing -> DQ.snoc ia q
+            -- XXX This can be improved for the case of `=`
+            Just (ia', q') ->
+                if snd ia <= snd ia'
+                then dqloop ia q'
+                else DQ.snoc ia q
+
+    extract (Tuple3' _ _ q) = return $ snd
+                                $ fromMaybe (0, error "min: Empty stream")
+                                $ DQ.head q
+
+-- Theoretically, we can approximate maximum in a rolling window by using a
+-- 'powerMean' with sufficiently large positive power.
+--
+-- | The maximum element in a rolling window.
+--
+-- If you want to compute the max of the entire stream Fold.max from streamly
+-- package would be much faster.
+--
+-- /Time/: \(\mathcal{O}(n*w)\) where \(w\) is the window size.
+--
+{-# INLINE max #-}
+max :: (Monad m, Ord a) => Fold m (a, Maybe a) a
+max = Fold step initial extract
+
+    where
+
+    initial = return $ Partial $ Tuple3' (0 :: Int) (0 :: Int)
+                (mempty :: DQ.Deque (Int, a))
+
+    step (Tuple3' i w q) (a, ma) =
+        case ma of
+            Nothing ->
+                return $ Partial $ Tuple3' (i + 1) (w + 1)
+                    (headCheck i q (w + 1) & dqloop (i, a))
+            Just _ ->
+                return $ Partial $ Tuple3' (i + 1) w
+                    (headCheck i q w & dqloop (i,a))
+
+    {-# INLINE headCheck #-}
+    headCheck i q w =
+        case DQ.uncons q of
+            Nothing -> q
+            Just (ia', q') ->
+                if fst ia' <= i - w
+                then q'
+                else q
+
+    dqloop ia q =
+        case DQ.unsnoc q of
+        Nothing -> DQ.snoc ia q
+        -- XXX This can be improved for the case of `=`
+        Just (ia', q') ->
+            if snd ia >= snd ia'
+            then dqloop ia q'
+            else DQ.snoc ia q
+
+    extract (Tuple3' _ _ q) =
+        return
+            $ snd
+            $ fromMaybe (0, error "max: Empty stream")
+            $ DQ.head q
 
 -------------------------------------------------------------------------------
 -- Mean
@@ -482,6 +596,21 @@ ewmaRampUpSmoothing n k1 = extract <$> Fold.foldl' step initial
 -------------------------------------------------------------------------------
 -- Spread/Dispersion
 -------------------------------------------------------------------------------
+
+-- | The difference between the max and min elements of a rolling window.
+--
+-- >>> range = Fold.teeWith (-) max min
+--
+-- If you want to compute the range of the entire stream @Fold.teeWith (-)
+-- Fold.max Fold.min@  from the streamly package would be much faster.
+--
+-- /Space/: \(\mathcal{O}(n)\) where @n@ is the window size.
+--
+-- /Time/: \(\mathcal{O}(n*w)\) where \(w\) is the window size.
+--
+{-# INLINE range #-}
+range :: (Monad m, Num a, Ord a) => Fold m (a, Maybe a) a
+range = Fold.teeWith (-) max min
 
 -- | @md n@ computes the mean absolute deviation (or mean deviation) in a
 -- sliding window of last @n@ elements in the stream.
@@ -834,8 +963,8 @@ binFromSizeN low binSize nbins x =
 binFromToN :: Integral a => a -> a -> a -> a -> HistBin a
 binFromToN low high n x =
     let count = high - low + 1
-        n1 = max n 1
-        n2 = min n1 count
+        n1 = Prelude.max n 1
+        n2 = Prelude.min n1 count
         binSize = count `div` n2
         nbins =
             if binSize * n2 < count

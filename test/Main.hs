@@ -20,7 +20,7 @@ import qualified Streamly.Internal.Data.Ring.Foreign as Ring
 import qualified Streamly.Internal.Data.Stream.IsStream as Stream
 import qualified Streamly.Prelude as S
 
-import Prelude hiding (sum, maximum, minimum)
+import Prelude hiding (sum, max, min)
 
 import Streamly.Statistics
 import Test.Hspec
@@ -233,14 +233,14 @@ main = hspec $ do
             testFoldResamples 6 sampleList
 
         -- Spread/Mean
-        describe "minimum" $ do
+        describe "min" $ do
             let scanInf = [31, 31, 31, 26, 26, 26, 26] :: [Double]
                 scanWin = [31, 31, 31, 26, 26, 26, 53] :: [Double]
-            testFunc testCase1 minimum scanInf scanWin
-        describe "maximum" $ do
+            testFunc testCase1 min scanInf scanWin
+        describe "max" $ do
             let scanInf = [31, 41, 59, 59, 59, 59, 97] :: [Double]
                 scanWin = [31, 41, 59, 59, 59, 58, 97] :: [Double]
-            testFunc testCase1 maximum scanInf scanWin
+            testFunc testCase1 max scanInf scanWin
         describe "range" $ do
             let scanInf = [0, 10, 28, 33, 33, 33, 71] :: [Double]
                 scanWin = [0, 10, 28, 33, 33, 32, 44] :: [Double]
