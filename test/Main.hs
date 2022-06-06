@@ -1,21 +1,18 @@
 {-# LANGUAGE TupleSections #-}
 
 import Control.Monad.IO.Class (liftIO)
-import Data.Complex (Complex ((:+)))
 import Data.Functor.Classes (liftEq2)
 import Foreign (Storable)
 import Streamly.Internal.Data.Stream.IsStream (SerialT)
 import Test.Hspec.Core.Spec (SpecM)
 import Test.Hspec.QuickCheck (prop)
-import Test.QuickCheck
-    (elements, chooseInt, choose, forAll, Property, vectorOf)
+import Test.QuickCheck (chooseInt, choose, forAll, Property, vectorOf)
 import Test.QuickCheck.Monadic (monadicIO, assert)
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Vector as V
 import qualified Statistics.Sample.Powers as STAT
-import qualified Statistics.Transform as STAT
 import qualified Streamly.Internal.Data.Array.Foreign.Mut as MA
 import qualified Streamly.Internal.Data.Array.Foreign.Type as Array
 import qualified Streamly.Internal.Data.Fold as Fold
@@ -23,7 +20,7 @@ import qualified Streamly.Internal.Data.Ring.Foreign as Ring
 import qualified Streamly.Internal.Data.Stream.IsStream as Stream
 import qualified Streamly.Prelude as S
 
-import Prelude hiding (sum, maximum, minimum)
+import Prelude hiding (sum, max, min)
 
 import Streamly.Statistics
 import Test.Hspec
@@ -161,21 +158,6 @@ testMode inputList res = do
     mode0 <- S.fold mode $ S.fromList inputList
     it ("Mode " ++ show mode0) $ mode0 == res
 
-testFFT :: Property
-testFFT = do
-    let lengths = [2, 4, 8, 16]
-    forAll (elements lengths) $ \list_length ->
-        forAll (vectorOf list_length (choose (-50.0 :: Double, 100.0)))
-            $ \ls ->
-                monadicIO $ do
-                    let tc = map (\x -> x :+ 0) ls
-                    let vr = V.toList (STAT.fft (V.fromList tc)
-                                        :: V.Vector STAT.CD)
-                    marr <- MA.fromList tc
-                    fft marr
-                    res <- MA.toList marr
-                    assert (vr == res)
-
 sampleList :: [Double]
 sampleList = [1.0, 2.0, 3.0, 4.0, 5.0]
 
@@ -232,6 +214,9 @@ main = hspec $ do
                 it "Infinite" $ a  == sI
                 it ("Finite " ++ show winSize) $ b == sW
 
+        describe "MD" $ testFuncMD md
+        describe "Kurt" testFuncKurt
+
         -- Resampling
         describe "JackKnife Mean" $
             testJackKnife jackKnifeMean jackKnifeInput jackMeanRes
@@ -248,17 +233,14 @@ main = hspec $ do
             testFoldResamples 6 sampleList
 
         -- Spread/Mean
-        describe "MD" $ testFuncMD md
-        describe "Kurt" testFuncKurt
-        prop "fft" testFFT
-        describe "minimum" $ do
+        describe "min" $ do
             let scanInf = [31, 31, 31, 26, 26, 26, 26] :: [Double]
                 scanWin = [31, 31, 31, 26, 26, 26, 53] :: [Double]
-            testFunc testCase1 minimum scanInf scanWin
-        describe "maximum" $ do
+            testFunc testCase1 min scanInf scanWin
+        describe "max" $ do
             let scanInf = [31, 41, 59, 59, 59, 59, 97] :: [Double]
                 scanWin = [31, 41, 59, 59, 59, 58, 97] :: [Double]
-            testFunc testCase1 maximum scanInf scanWin
+            testFunc testCase1 max scanInf scanWin
         describe "range" $ do
             let scanInf = [0, 10, 28, 33, 33, 33, 71] :: [Double]
                 scanWin = [0, 10, 28, 33, 33, 32, 44] :: [Double]
