@@ -96,8 +96,8 @@ module Streamly.Statistics
     -- | See https://en.wikipedia.org/wiki/Location_parameter .
     --
     -- See https://en.wikipedia.org/wiki/Central_tendency .
-    , min
-    , max
+    , minimum
+    , maximum
     , rawMoment
     , rawMomentFrac
 
@@ -176,11 +176,11 @@ where
 import Control.Exception (assert)
 import Control.Monad (when)
 import Control.Monad.IO.Class (MonadIO(..))
-import Data.Function ((&))
 import Data.Maybe (fromMaybe)
-import Data.Functor.Identity (runIdentity, Identity)
 import Data.Bits (Bits(complement, shiftL, shiftR, (.&.), (.|.)))
 import Data.Complex (Complex ((:+)))
+import Data.Function ((&))
+import Data.Functor.Identity (runIdentity, Identity)
 import Data.Map.Strict (Map, foldrWithKey)
 import Foreign.Storable (Storable)
 import Streamly.Data.Fold.Tee(Tee(..), toFold)
@@ -195,7 +195,6 @@ import Streamly.Internal.Data.Unfold.Type (Unfold(..))
 import System.Random.MWC (createSystemRandom, uniformRM)
 
 import qualified Deque.Strict as DQ
-import qualified Prelude
 import qualified Streamly.Internal.Data.Array.Foreign as Array
 import qualified Streamly.Internal.Data.Array.Foreign.Mut as MA
 import qualified Streamly.Internal.Data.Fold as Fold
@@ -203,7 +202,7 @@ import qualified Streamly.Internal.Data.Fold.Window as Window
 import qualified Streamly.Internal.Data.Stream.IsStream as Stream
 import qualified Streamly.Internal.Data.Unfold as Unfold
 
-import Prelude hiding (length, sum, min, max)
+import Prelude hiding (length, sum, minimum, maximum)
 
 -- TODO: Overflow checks. Would be good if we can directly replace the
 -- operations with overflow checked operations.
@@ -314,6 +313,8 @@ fft marr
                             butterfly (i + l2)
                     butterfly j
             flight 0 0
+
+-------------------------------------------------------------------------------
 -- Location
 -------------------------------------------------------------------------------
 
@@ -326,14 +327,14 @@ fft marr
 --
 -- | The minimum element in a rolling window.
 --
--- If you want to compute the min of the entire stream Fold.min from streamly
+-- If you want to compute the minimum of the entire stream Fold.min from streamly
 -- package would be much faster.
 --
 -- /Time/: \(\mathcal{O}(n*w)\) where \(w\) is the window size.
 --
-{-# INLINE min #-}
-min :: (Monad m, Ord a) => Fold m (a, Maybe a) a
-min = Fold step initial extract
+{-# INLINE minimum #-}
+minimum :: (Monad m, Ord a) => Fold m (a, Maybe a) a
+minimum = Fold step initial extract
 
     where
 
@@ -368,7 +369,7 @@ min = Fold step initial extract
                 else DQ.snoc ia q
 
     extract (Tuple3' _ _ q) = return $ snd
-                                $ fromMaybe (0, error "min: Empty stream")
+                                $ fromMaybe (0, error "minimum: Empty stream")
                                 $ DQ.head q
 
 -- Theoretically, we can approximate maximum in a rolling window by using a
@@ -381,9 +382,9 @@ min = Fold step initial extract
 --
 -- /Time/: \(\mathcal{O}(n*w)\) where \(w\) is the window size.
 --
-{-# INLINE max #-}
-max :: (Monad m, Ord a) => Fold m (a, Maybe a) a
-max = Fold step initial extract
+{-# INLINE maximum #-}
+maximum :: (Monad m, Ord a) => Fold m (a, Maybe a) a
+maximum = Fold step initial extract
 
     where
 
@@ -420,7 +421,7 @@ max = Fold step initial extract
     extract (Tuple3' _ _ q) =
         return
             $ snd
-            $ fromMaybe (0, error "max: Empty stream")
+            $ fromMaybe (0, error "maximum: Empty stream")
             $ DQ.head q
 
 -------------------------------------------------------------------------------
@@ -702,9 +703,9 @@ ewmaRampUpSmoothing n k1 = extract <$> Fold.foldl' step initial
 -- Spread/Dispersion
 -------------------------------------------------------------------------------
 
--- | The difference between the max and min elements of a rolling window.
+-- | The difference between the maximum and minimum elements of a rolling window.
 --
--- >>> range = Fold.teeWith (-) max min
+-- >>> range = Fold.teeWith (-) maximum minimum
 --
 -- If you want to compute the range of the entire stream @Fold.teeWith (-)
 -- Fold.max Fold.min@  from the streamly package would be much faster.
@@ -715,7 +716,7 @@ ewmaRampUpSmoothing n k1 = extract <$> Fold.foldl' step initial
 --
 {-# INLINE range #-}
 range :: (Monad m, Num a, Ord a) => Fold m (a, Maybe a) a
-range = Fold.teeWith (-) max min
+range = Fold.teeWith (-) maximum minimum
 
 -- | @md n@ computes the mean absolute deviation (or mean deviation) in a
 -- sliding window of last @n@ elements in the stream.
