@@ -176,12 +176,12 @@ where
 import Control.Exception (assert)
 import Control.Monad (when)
 import Control.Monad.IO.Class (MonadIO(..))
-import Data.Maybe (fromMaybe)
 import Data.Bits (Bits(complement, shiftL, shiftR, (.&.), (.|.)))
 import Data.Complex (Complex ((:+)))
 import Data.Function ((&))
 import Data.Functor.Identity (runIdentity, Identity)
 import Data.Map.Strict (Map, foldrWithKey)
+import Data.Maybe (fromMaybe)
 import Foreign.Storable (Storable)
 import Streamly.Data.Fold.Tee(Tee(..), toFold)
 import Streamly.Internal.Control.Concurrent (MonadAsync)
@@ -194,7 +194,7 @@ import Streamly.Internal.Data.Tuple.Strict (Tuple'(..), Tuple3'(..))
 import Streamly.Internal.Data.Unfold.Type (Unfold(..))
 import System.Random.MWC (createSystemRandom, uniformRM)
 
-import qualified Deque.Strict as DQ
+import qualified Deque.Strict as Deque
 import qualified Streamly.Internal.Data.Array.Foreign as Array
 import qualified Streamly.Internal.Data.Array.Foreign.Mut as MA
 import qualified Streamly.Internal.Data.Fold as Fold
@@ -327,8 +327,9 @@ fft marr
 --
 -- | The minimum element in a rolling window.
 --
--- If you want to compute the minimum of the entire stream Fold.min from streamly
--- package would be much faster.
+-- For smaller window sizes (< 30) Streamly.Data.Fold.Window.minimum performs
+-- better.  If you want to compute the minimum of the entire stream Fold.min
+-- from streamly package would be much faster.
 --
 -- /Time/: \(\mathcal{O}(n*w)\) where \(w\) is the window size.
 --
@@ -338,21 +339,28 @@ minimum = Fold step initial extract
 
     where
 
-    initial = return $ Partial $ Tuple3' (0 :: Int) (0 :: Int)
-                (mempty :: DQ.Deque (Int, a))
+    initial =
+        return
+            $ Partial
+            $ Tuple3' (0 :: Int) (0 :: Int) (mempty :: Deque.Deque (Int, a))
 
     step (Tuple3' i w q) (a, ma) =
         case ma of
             Nothing ->
-                return $ Partial $ Tuple3' (i + 1) (w + 1)
-                    (headCheck i q (w + 1) & dqloop (i, a))
+                return
+                    $ Partial
+                    $ Tuple3'
+                        (i + 1)
+                        (w + 1)
+                        (headCheck i q (w + 1) & dqloop (i, a))
             Just _ ->
-                return $ Partial $ Tuple3' (i + 1) w
-                    (headCheck i q w & dqloop (i,a))
+                return
+                    $ Partial
+                    $ Tuple3' (i + 1) w (headCheck i q w & dqloop (i,a))
 
     {-# INLINE headCheck #-}
     headCheck i q w =
-        case DQ.uncons q of
+        case Deque.uncons q of
             Nothing -> q
             Just (ia', q') ->
                 if fst ia' <= i - w
@@ -360,25 +368,28 @@ minimum = Fold step initial extract
                 else q
 
     dqloop ia q =
-        case DQ.unsnoc q of
-            Nothing -> DQ.snoc ia q
+        case Deque.unsnoc q of
+            Nothing -> Deque.snoc ia q
             -- XXX This can be improved for the case of `=`
             Just (ia', q') ->
                 if snd ia <= snd ia'
                 then dqloop ia q'
-                else DQ.snoc ia q
+                else Deque.snoc ia q
 
-    extract (Tuple3' _ _ q) = return $ snd
-                                $ fromMaybe (0, error "minimum: Empty stream")
-                                $ DQ.head q
+    extract (Tuple3' _ _ q) =
+        return
+            $ snd
+            $ fromMaybe (0, error "minimum: Empty stream")
+            $ Deque.head q
 
 -- Theoretically, we can approximate maximum in a rolling window by using a
 -- 'powerMean' with sufficiently large positive power.
 --
 -- | The maximum element in a rolling window.
 --
--- If you want to compute the max of the entire stream Fold.max from streamly
--- package would be much faster.
+-- For smaller window sizes (< 30) Streamly.Data.Fold.Window.maximum performs
+-- better.  If you want to compute the maximum of the entire stream
+-- Streamly.Data.Fold.maximum from streamly package would be much faster.
 --
 -- /Time/: \(\mathcal{O}(n*w)\) where \(w\) is the window size.
 --
@@ -388,21 +399,28 @@ maximum = Fold step initial extract
 
     where
 
-    initial = return $ Partial $ Tuple3' (0 :: Int) (0 :: Int)
-                (mempty :: DQ.Deque (Int, a))
+    initial =
+        return
+            $ Partial
+            $ Tuple3' (0 :: Int) (0 :: Int) (mempty :: Deque.Deque (Int, a))
 
     step (Tuple3' i w q) (a, ma) =
         case ma of
             Nothing ->
-                return $ Partial $ Tuple3' (i + 1) (w + 1)
-                    (headCheck i q (w + 1) & dqloop (i, a))
+                return
+                    $ Partial
+                    $ Tuple3'
+                        (i + 1)
+                        (w + 1)
+                        (headCheck i q (w + 1) & dqloop (i, a))
             Just _ ->
-                return $ Partial $ Tuple3' (i + 1) w
-                    (headCheck i q w & dqloop (i,a))
+                return
+                    $ Partial
+                    $ Tuple3' (i + 1) w (headCheck i q w & dqloop (i,a))
 
     {-# INLINE headCheck #-}
     headCheck i q w =
-        case DQ.uncons q of
+        case Deque.uncons q of
             Nothing -> q
             Just (ia', q') ->
                 if fst ia' <= i - w
@@ -410,19 +428,19 @@ maximum = Fold step initial extract
                 else q
 
     dqloop ia q =
-        case DQ.unsnoc q of
-        Nothing -> DQ.snoc ia q
-        -- XXX This can be improved for the case of `=`
-        Just (ia', q') ->
-            if snd ia >= snd ia'
-            then dqloop ia q'
-            else DQ.snoc ia q
+        case Deque.unsnoc q of
+            Nothing -> Deque.snoc ia q
+            -- XXX This can be improved for the case of `=`
+            Just (ia', q') ->
+                if snd ia >= snd ia'
+                then dqloop ia q'
+                else Deque.snoc ia q
 
     extract (Tuple3' _ _ q) =
         return
             $ snd
             $ fromMaybe (0, error "maximum: Empty stream")
-            $ DQ.head q
+            $ Deque.head q
 
 -------------------------------------------------------------------------------
 -- Mean
@@ -708,7 +726,7 @@ ewmaRampUpSmoothing n k1 = extract <$> Fold.foldl' step initial
 -- >>> range = Fold.teeWith (-) maximum minimum
 --
 -- If you want to compute the range of the entire stream @Fold.teeWith (-)
--- Fold.max Fold.min@  from the streamly package would be much faster.
+-- Fold.maximum Fold.minimum@ from the streamly package would be much faster.
 --
 -- /Space/: \(\mathcal{O}(n)\) where @n@ is the window size.
 --
@@ -1069,8 +1087,8 @@ binFromSizeN low binSize nbins x =
 binFromToN :: Integral a => a -> a -> a -> a -> HistBin a
 binFromToN low high n x =
     let count = high - low + 1
-        n1 = Prelude.max n 1
-        n2 = Prelude.min n1 count
+        n1 = max n 1
+        n2 = min n1 count
         binSize = count `div` n2
         nbins =
             if binSize * n2 < count
