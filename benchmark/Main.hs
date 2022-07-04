@@ -78,20 +78,20 @@ main =
   defaultMain
     [ bgroup
         "fold"
-        [ benchWithFold numElements "min (window size 100)"
+        [ benchWithFold numElements "minimum (window size 100)"
             (Ring.slidingWindow 100 Statistics.minimum)
-        , benchWithFold numElements "min (window size 1000)"
+        , benchWithFold numElements "minimum (window size 1000)"
             (Ring.slidingWindow 1000 Statistics.minimum)
         , benchWith sourceDescendingInt numElements
-            "min descending (window size 1000)"
+            "minimum descending (window size 1000)"
             (Ring.slidingWindow 1000 Statistics.minimum)
 
-        , benchWithFold numElements "max (window size 100)"
+        , benchWithFold numElements "maximum (window size 100)"
             (Ring.slidingWindow 100 Statistics.maximum)
-        , benchWithFold numElements "max (window size 1000)"
+        , benchWithFold numElements "maximum (window size 1000)"
             (Ring.slidingWindow 1000 Statistics.maximum)
         , benchWith sourceDescendingInt numElements
-            "max descending (window size 1000)"
+            "maximum descending (window size 1000)"
             (Ring.slidingWindow 1000 Statistics.maximum)
 
         , benchWithFold numElements "range (window size 100)"
@@ -236,13 +236,13 @@ main =
         ]
     , bgroup
         "scan"
-        [ benchWithPostscan numElements "min (window size 100)"
+        [ benchWithPostscan numElements "minimum (window size 100)"
             (Ring.slidingWindow 100 Statistics.minimum)
-        , benchWithPostscan numElements "min (window size 1000)"
+        , benchWithPostscan numElements "minimum (window size 1000)"
             (Ring.slidingWindow 1000 Statistics.minimum)
-        , benchWithPostscan numElements "max (window size 100)"
+        , benchWithPostscan numElements "maximum (window size 100)"
             (Ring.slidingWindow 100 Statistics.maximum)
-        , benchWithPostscan numElements "max (window size 1000)"
+        , benchWithPostscan numElements "maximum (window size 1000)"
             (Ring.slidingWindow 1000 Statistics.maximum)
         , benchWithPostscan numElements "range (window size 100)"
             (Ring.slidingWindow 100 Statistics.range)
