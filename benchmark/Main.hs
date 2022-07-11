@@ -73,204 +73,169 @@ benchWithFoldResamples len name f = bench name $ nfIO $ do
 numElements :: Int
 numElements = 100000
 
-main :: IO ()
-main =
-  defaultMain
-    [ bgroup
-        "fold"
-        [ benchWithFold numElements "min (window size 100)"
-            (Ring.slidingWindow 100 Statistics.minimum)
-        , benchWithFold numElements "min (window size 1000)"
-            (Ring.slidingWindow 1000 Statistics.minimum)
-        , benchWith sourceDescendingInt numElements
-            "min descending (window size 1000)"
-            (Ring.slidingWindow 1000 Statistics.minimum)
+runBenchMarks ::
+       (Int -> String -> Fold IO Double Double -> Benchmark)
+    -> (Int -> String -> Fold IO Int Int -> Benchmark)
+    -> [Benchmark]
+runBenchMarks fDouble fInt =
+    [
+      fDouble numElements "min (window size 100)"
+        (Ring.slidingWindow 100 Statistics.minimum)
+    , fDouble numElements "min (window size 1000)"
+        (Ring.slidingWindow 1000 Statistics.minimum)
+    , benchWith sourceDescendingInt numElements
+        "min descending (window size 1000)"
+        (Ring.slidingWindow 1000 Statistics.minimum)
 
-        , benchWithFold numElements "max (window size 100)"
-            (Ring.slidingWindow 100 Statistics.maximum)
-        , benchWithFold numElements "max (window size 1000)"
-            (Ring.slidingWindow 1000 Statistics.maximum)
-        , benchWith sourceDescendingInt numElements
-            "max descending (window size 1000)"
-            (Ring.slidingWindow 1000 Statistics.maximum)
+    , fDouble numElements "max (window size 100)"
+        (Ring.slidingWindow 100 Statistics.maximum)
+    , fDouble numElements "max (window size 1000)"
+        (Ring.slidingWindow 1000 Statistics.maximum)
+    , benchWith sourceDescendingInt numElements
+        "max descending (window size 1000)"
+        (Ring.slidingWindow 1000 Statistics.maximum)
 
-        , benchWithFold numElements "range (window size 100)"
-            (Ring.slidingWindow 100 Statistics.range)
-        , benchWithFold numElements "range (window size 1000)"
-            (Ring.slidingWindow 1000 Statistics.range)
+    , fDouble numElements "range (window size 100)"
+        (Ring.slidingWindow 100 Statistics.range)
+    , fDouble numElements "range (window size 1000)"
+        (Ring.slidingWindow 1000 Statistics.range)
 
-        , benchWithFoldInt numElements "sumInt (window size 100)"
-            (Ring.slidingWindow 100 Statistics.sumInt)
-        , benchWithFoldInt numElements "sum for Int (window size 100)"
-            (Ring.slidingWindow 100 Statistics.sum)
+    , fInt numElements "sumInt (window size 100)"
+        (Ring.slidingWindow 100 Statistics.sumInt)
+    , fInt numElements "sum for Int (window size 100)"
+        (Ring.slidingWindow 100 Statistics.sum)
 
-        , benchWithFold numElements "sum (window size 100)"
-            (Ring.slidingWindow 100 Statistics.sum)
-        , benchWithFold numElements "sum (window size 1000)"
-            (Ring.slidingWindow 1000 Statistics.sum)
-        , benchWithFold numElements "sum (entire stream)"
-            (Statistics.cumulative Statistics.sum)
-        , benchWithFold numElements "sum (Data.Fold)"
-            (Fold.sum)
+    , fDouble numElements "sum (window size 100)"
+        (Ring.slidingWindow 100 Statistics.sum)
+    , fDouble numElements "sum (window size 1000)"
+        (Ring.slidingWindow 1000 Statistics.sum)
+    , fDouble numElements "sum (entire stream)"
+        (Statistics.cumulative Statistics.sum)
+    , fDouble numElements "sum (Data.Fold)" Fold.sum
+    , fDouble numElements "mean (window size 100)"
+        (Ring.slidingWindow 100 Statistics.mean)
+    , fDouble numElements "mean (window size 1000)"
+        (Ring.slidingWindow 1000 Statistics.mean)
+    , fDouble numElements "mean (entire stream)"
+        (Statistics.cumulative Statistics.mean)
+    , fDouble numElements "mean (Data.Fold)" Fold.mean
 
-        , benchWithFold numElements "mean (window size 100)"
-            (Ring.slidingWindow 100 Statistics.mean)
-        , benchWithFold numElements "mean (window size 1000)"
-            (Ring.slidingWindow 1000 Statistics.mean)
-        , benchWithFold numElements "mean (entire stream)"
-            (Statistics.cumulative Statistics.mean)
-        , benchWithFold numElements "mean (Data.Fold)"
-            (Fold.mean)
+    , fDouble numElements "welfordMean (window size 100)"
+        (Ring.slidingWindow 100 Statistics.welfordMean)
+    , fDouble numElements "welfordMean (window size 1000)"
+        (Ring.slidingWindow 1000 Statistics.welfordMean)
+    , fDouble numElements "welfordMean (entire stream)"
+        (Statistics.cumulative Statistics.welfordMean)
 
-        , benchWithFold
-            numElements
-            "welfordMean (window size 100)"
-            (Ring.slidingWindow 100 Statistics.welfordMean)
-        , benchWithFold
-            numElements
-            "welfordMean (window size 1000)"
-            (Ring.slidingWindow 1000 Statistics.welfordMean)
-        , benchWithFold
-            numElements
-            "welfordMean (entire stream)"
-            (Statistics.cumulative Statistics.welfordMean)
+    , fDouble numElements "geometricMean (window size 100)"
+        (Ring.slidingWindow 100 Statistics.geometricMean)
+    , fDouble numElements "geometricMean (window size 1000)"
+        (Ring.slidingWindow 1000 Statistics.geometricMean)
+    , fDouble numElements "geometricMean (entire stream)"
+        (Statistics.cumulative Statistics.geometricMean)
 
-        , benchWithFold numElements "geometricMean (window size 100)"
-            (Ring.slidingWindow 100 Statistics.geometricMean)
-        , benchWithFold numElements "geometricMean (window size 1000)"
-            (Ring.slidingWindow 1000 Statistics.geometricMean)
-        , benchWithFold numElements "geometricMean (entire stream)"
-            (Statistics.cumulative Statistics.geometricMean)
+    , fDouble numElements "harmonicMean (window size 100)"
+        (Ring.slidingWindow 100 Statistics.harmonicMean)
+    , fDouble numElements "harmonicMean (window size 1000)"
+        (Ring.slidingWindow 1000 Statistics.harmonicMean)
+    , fDouble numElements "harmonicMean (entire stream)"
+        (Statistics.cumulative Statistics.harmonicMean)
 
-        , benchWithFold numElements "harmonicMean (window size 100)"
-            (Ring.slidingWindow 100 Statistics.harmonicMean)
-        , benchWithFold numElements "harmonicMean (window size 1000)"
-            (Ring.slidingWindow 1000 Statistics.harmonicMean)
-        , benchWithFold numElements "harmonicMean (entire stream)"
-            (Statistics.cumulative Statistics.harmonicMean)
+    , fDouble numElements "quadraticMean (window size 100)"
+        (Ring.slidingWindow 100 Statistics.quadraticMean)
+    , fDouble numElements "quadraticMean (window size 1000)"
+        (Ring.slidingWindow 1000 Statistics.quadraticMean)
+    , fDouble numElements "quadraticMean (entire stream)"
+        (Statistics.cumulative Statistics.quadraticMean)
 
-        , benchWithFold numElements "quadraticMean (window size 100)"
-            (Ring.slidingWindow 100 Statistics.quadraticMean)
-        , benchWithFold numElements "quadraticMean (window size 1000)"
-            (Ring.slidingWindow 1000 Statistics.quadraticMean)
-        , benchWithFold numElements "quadraticMean (entire stream)"
-            (Statistics.cumulative Statistics.quadraticMean)
+    , fDouble numElements "powerSum 2 (window size 100)"
+        (Ring.slidingWindow 100 (Statistics.powerSum 2))
+    , fDouble numElements "powerSum 2 (entire stream)"
+        (Statistics.cumulative (Statistics.powerSum 2))
 
-        , benchWithFold numElements "powerSum 2 (window size 100)"
-            (Ring.slidingWindow 100 (Statistics.powerSum 2))
-        , benchWithFold numElements "powerSum 2 (entire stream)"
-            (Statistics.cumulative (Statistics.powerSum 2))
+    , fDouble numElements "rawMoment 2 (window size 100)"
+        (Ring.slidingWindow 100 (Statistics.powerSum 2))
+    , fDouble numElements "rawMoment 2 (entire stream)"
+        (Statistics.cumulative (Statistics.rawMoment 2))
 
-        , benchWithFold numElements "rawMoment 2 (window size 100)"
-            (Ring.slidingWindow 100 (Statistics.powerSum 2))
-        , benchWithFold numElements "rawMoment 2 (entire stream)"
-            (Statistics.cumulative (Statistics.rawMoment 2))
+    , fDouble numElements "powerMean 1 (window size 100)"
+        (Ring.slidingWindow 100 (Statistics.powerMean 1))
+    , fDouble numElements "powerMean 2 (window size 100)"
+        (Ring.slidingWindow 100 (Statistics.powerMean 2))
+    , fDouble numElements "powerMean 10 (window size 100)"
+        (Ring.slidingWindow 100 (Statistics.powerMean 10))
 
-        , benchWithFold numElements "powerMean 1 (window size 100)"
-            (Ring.slidingWindow 100 (Statistics.powerMean 1))
-        , benchWithFold numElements "powerMean 2 (window size 100)"
-            (Ring.slidingWindow 100 (Statistics.powerMean 2))
-        , benchWithFold numElements "powerMean 10 (window size 100)"
-            (Ring.slidingWindow 100 (Statistics.powerMean 10))
+    , fDouble numElements "powerMeanFrac (-1) (window size 100)"
+        (Ring.slidingWindow 100 (Statistics.powerMeanFrac (-1)))
+    , fDouble numElements "powerMeanFrac 1 (window size 100)"
+        (Ring.slidingWindow 100 (Statistics.powerMeanFrac 1))
+    , fDouble numElements "powerMeanFrac 2 (window size 100)"
+        (Ring.slidingWindow 100 (Statistics.powerMeanFrac 2))
+    , fDouble numElements "powerMeanFrac 10 (window size 100)"
+        (Ring.slidingWindow 100 (Statistics.powerMeanFrac 10))
 
-        , benchWithFold numElements "powerMeanFrac (-1) (window size 100)"
-            (Ring.slidingWindow 100 (Statistics.powerMeanFrac (-1)))
-        , benchWithFold numElements "powerMeanFrac 1 (window size 100)"
-            (Ring.slidingWindow 100 (Statistics.powerMeanFrac 1))
-        , benchWithFold numElements "powerMeanFrac 2 (window size 100)"
-            (Ring.slidingWindow 100 (Statistics.powerMeanFrac 2))
-        , benchWithFold numElements "powerMeanFrac 10 (window size 100)"
-            (Ring.slidingWindow 100 (Statistics.powerMeanFrac 10))
+    , fDouble numElements "ewma (entire stream)"
+        (Statistics.ewma 0.5)
+    , fDouble numElements "ewmaAfterMean (entire stream)"
+        (Statistics.ewmaAfterMean 10 0.5)
+    , fDouble numElements "ewmaRampUpSmoothing (entire stream)"
+        (Statistics.ewmaRampUpSmoothing 0.5 0.5)
 
-        , benchWithFold numElements "ewma (entire stream)"
-            (Statistics.ewma 0.5)
-        , benchWithFold numElements "ewmaAfterMean (entire stream)"
-            (Statistics.ewmaAfterMean 10 0.5)
-        , benchWithFold numElements "ewmaRampUpSmoothing (entire stream)"
-            (Statistics.ewmaRampUpSmoothing 0.5 0.5)
+    , fDouble numElements "variance (window size 100)"
+        (Ring.slidingWindow 100 Statistics.variance)
+    , fDouble numElements "variance (entire stream)"
+        (Statistics.cumulative Statistics.variance)
+    , fDouble numElements "variance (Data.Fold)" Fold.variance
 
-        , benchWithFold numElements "variance (window size 100)"
-            (Ring.slidingWindow 100 (Statistics.variance))
-        , benchWithFold numElements "variance (entire stream)"
-            (Statistics.cumulative (Statistics.variance))
-        , benchWithFold numElements "variance (Data.Fold)"
-            (Fold.variance)
+    , fDouble numElements "sampleVariance (window size 100)"
+        (Ring.slidingWindow 100 Statistics.sampleVariance)
+    , fDouble numElements "sampleVariance (entire stream)"
+        (Statistics.cumulative Statistics.sampleVariance)
 
-        , benchWithFold numElements "sampleVariance (window size 100)"
-            (Ring.slidingWindow 100 (Statistics.sampleVariance))
-        , benchWithFold numElements "sampleVariance (entire stream)"
-            (Statistics.cumulative (Statistics.sampleVariance))
+    , fDouble numElements "stdDev (window size 100)"
+        (Ring.slidingWindow 100 Statistics.stdDev)
+    , fDouble numElements "stdDev (entire stream)"
+        (Statistics.cumulative Statistics.stdDev)
+    , fDouble numElements "stdDev (Data.Fold)" Fold.stdDev
 
-        , benchWithFold numElements "stdDev (window size 100)"
-            (Ring.slidingWindow 100 (Statistics.stdDev))
-        , benchWithFold numElements "stdDev (entire stream)"
-            (Statistics.cumulative (Statistics.stdDev))
-        , benchWithFold numElements "stdDev (Data.Fold)"
-            (Fold.stdDev)
+    , fDouble numElements "sampleStdDev (window size 100)"
+        (Ring.slidingWindow 100 Statistics.sampleStdDev)
+    , fDouble numElements "sampleStdDev (entire stream)"
+        (Statistics.cumulative Statistics.sampleStdDev)
 
-        , benchWithFold numElements "sampleStdDev (window size 100)"
-            (Ring.slidingWindow 100 (Statistics.sampleStdDev))
-        , benchWithFold numElements "sampleStdDev (entire stream)"
-            (Statistics.cumulative (Statistics.sampleStdDev))
-
-        , benchWithFold numElements "stdErrMean (window size 100)"
-            (Ring.slidingWindow 100 (Statistics.stdErrMean))
-        , benchWithFold numElements "stdErrMean (entire stream)"
-            (Statistics.cumulative (Statistics.stdErrMean))
+    , fDouble numElements "stdErrMean (window size 100)"
+        (Ring.slidingWindow 100 Statistics.stdErrMean)
+    , fDouble numElements "stdErrMean (entire stream)"
+        (Statistics.cumulative Statistics.stdErrMean)
 
 -- These benchmarks take a lot of time/memory with fusion-plugin possibly
 -- because of the use of Tee.
-#ifndef FUSION_PLUGIN
-        , benchWithFold numElements "skewness (window size 100)"
-            (Ring.slidingWindow 100 (Statistics.skewness))
-        , benchWithFold numElements "skewness (entire stream)"
-            (Statistics.cumulative (Statistics.skewness))
 
-        , benchWithFold numElements "kurtosis (window size 100)"
-            (Ring.slidingWindow 100 (Statistics.kurtosis))
-        , benchWithFold numElements "kurtosis (entire stream)"
-            (Statistics.cumulative (Statistics.kurtosis))
-#endif
-        , benchWithFold numElements "md (window size 100)"
-            (Ring.slidingWindowWith 100 Statistics.md)
-        ]
-    , bgroup
-        "scan"
-        [ benchWithPostscan numElements "min (window size 100)"
-            (Ring.slidingWindow 100 Statistics.minimum)
-        , benchWithPostscan numElements "min (window size 1000)"
-            (Ring.slidingWindow 1000 Statistics.minimum)
-        , benchWithPostscan numElements "max (window size 100)"
-            (Ring.slidingWindow 100 Statistics.maximum)
-        , benchWithPostscan numElements "max (window size 1000)"
-            (Ring.slidingWindow 1000 Statistics.maximum)
-        , benchWithPostscan numElements "range (window size 100)"
-            (Ring.slidingWindow 100 Statistics.range)
-        , benchWithPostscan numElements "range (window size 1000)"
-            (Ring.slidingWindow 1000 Statistics.range)
-        , benchWithPostscan numElements "sum (window size 100)"
-            (Ring.slidingWindow 100 Statistics.sum)
-        , benchWithPostscan numElements "sum (window size 1000)"
-            (Ring.slidingWindow 1000 Statistics.sum)
-        , benchWithPostscan numElements "mean (window size 100)"
-            (Ring.slidingWindow 100 Statistics.mean)
-        , benchWithPostscan numElements "mean (window size 1000)"
-            (Ring.slidingWindow 1000 Statistics.mean)
-        , benchWithPostscan
-            numElements
-            "welfordMean (window size 100)"
-            (Ring.slidingWindow 100 Statistics.welfordMean)
-        , benchWithPostscan
-            numElements
-            "welfordMean (window size 1000)"
-            (Ring.slidingWindow 1000 Statistics.welfordMean)
-        , benchWithPostscan
-            numElements
-            "md (window size 100)"
-            (Ring.slidingWindowWith 100 Statistics.md)
-        -- XXX These benchmarks measure the cost of creating the array as well,
-        -- we can do that outside the benchmark.
-        , benchWithResample numElements "Resample"
+    , fDouble numElements "skewness (window size 100)"
+        (Ring.slidingWindow 100 Statistics.skewness)
+    , fDouble numElements "skewness (entire stream)"
+        (Statistics.cumulative Statistics.skewness)
+
+    , fDouble numElements "kurtosis (window size 100)"
+        (Ring.slidingWindow 100 Statistics.kurtosis)
+    , fDouble numElements "kurtosis (entire stream)"
+        (Statistics.cumulative Statistics.kurtosis)
+
+    , fDouble numElements "md (window size 100)"
+        (Ring.slidingWindowWith 100 Statistics.md)
+
+    ]
+
+main :: IO ()
+main =
+  defaultMain
+    [
+      bgroup "fold" $ runBenchMarks benchWithFold benchWithFoldInt
+    , bgroup "scan" $ runBenchMarks benchWithPostscan benchWithFoldInt
+    -- XXX These benchmarks measure the cost of creating the array as well,
+    -- we can do that outside the benchmark.
+    , bgroup "resample"
+        [ benchWithResample numElements "Resample"
         , benchWithFoldResamples 316 "FoldResamples 316" Fold.mean
         ]
     ]
