@@ -73,11 +73,10 @@ benchWithFoldResamples len name f = bench name $ nfIO $ do
 numElements :: Int
 numElements = 100000
 
-runBenchMarks ::
+runBenchmarks ::
        (Int -> String -> Fold IO Double Double -> Benchmark)
-    -> (Int -> String -> Fold IO Int Int -> Benchmark)
     -> [Benchmark]
-runBenchMarks fDouble fInt =
+runBenchmarks fDouble =
     [
       fDouble numElements "min (window size 100)"
         (Ring.slidingWindow 100 Statistics.minimum)
@@ -99,11 +98,6 @@ runBenchMarks fDouble fInt =
         (Ring.slidingWindow 100 Statistics.range)
     , fDouble numElements "range (window size 1000)"
         (Ring.slidingWindow 1000 Statistics.range)
-
-    , fInt numElements "sumInt (window size 100)"
-        (Ring.slidingWindow 100 Statistics.sumInt)
-    , fInt numElements "sum for Int (window size 100)"
-        (Ring.slidingWindow 100 Statistics.sum)
 
     , fDouble numElements "sum (window size 100)"
         (Ring.slidingWindow 100 Statistics.sum)
@@ -210,7 +204,7 @@ runBenchMarks fDouble fInt =
 
 -- These benchmarks take a lot of time/memory with fusion-plugin possibly
 -- because of the use of Tee.
-
+#ifndef FUSION_PLUGIN
     , fDouble numElements "skewness (window size 100)"
         (Ring.slidingWindow 100 Statistics.skewness)
     , fDouble numElements "skewness (entire stream)"
@@ -220,7 +214,7 @@ runBenchMarks fDouble fInt =
         (Ring.slidingWindow 100 Statistics.kurtosis)
     , fDouble numElements "kurtosis (entire stream)"
         (Statistics.cumulative Statistics.kurtosis)
-
+#endif
     , fDouble numElements "md (window size 100)"
         (Ring.slidingWindowWith 100 Statistics.md)
 
@@ -230,8 +224,14 @@ main :: IO ()
 main =
   defaultMain
     [
-      bgroup "fold" $ runBenchMarks benchWithFold benchWithFoldInt
-    , bgroup "scan" $ runBenchMarks benchWithPostscan benchWithFoldInt
+      bgroup "fold" $ runBenchmarks benchWithFold
+    , bgroup "fold_Int"
+        [ benchWithFoldInt numElements "sumInt (window size 100)"
+            (Ring.slidingWindow 100 Statistics.sumInt)
+        , benchWithFoldInt numElements "sum for Int (window size 100)"
+            (Ring.slidingWindow 100 Statistics.sum)
+        ]
+    , bgroup "scan" $ runBenchmarks benchWithPostscan
     -- XXX These benchmarks measure the cost of creating the array as well,
     -- we can do that outside the benchmark.
     , bgroup "resample"
