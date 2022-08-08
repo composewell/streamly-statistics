@@ -6,7 +6,7 @@ import Streamly.Prelude (SerialT)
 import System.Random (randomRIO)
 
 import qualified Streamly.Data.Fold as Fold
-import qualified Streamly.Internal.Data.Array.Foreign.Type as Array
+import qualified Streamly.Internal.Data.Array.Unboxed.Type as Array
 import qualified Streamly.Internal.Data.Ring.Foreign as Ring
 import qualified Streamly.Internal.Data.Stream.IsStream.Type as S
 import qualified Streamly.Prelude as Stream
@@ -193,8 +193,8 @@ main =
             (Ring.slidingWindow 100 (Statistics.variance))
         , benchWithFold numElements "variance (entire stream)"
             (Statistics.cumulative (Statistics.variance))
-        , benchWithFold numElements "variance (Data.Fold)"
-            (Fold.variance)
+        -- , benchWithFold numElements "variance (Data.Fold)"
+        --     (Fold.variance)
 
         , benchWithFold numElements "sampleVariance (window size 100)"
             (Ring.slidingWindow 100 (Statistics.sampleVariance))
@@ -205,8 +205,8 @@ main =
             (Ring.slidingWindow 100 (Statistics.stdDev))
         , benchWithFold numElements "stdDev (entire stream)"
             (Statistics.cumulative (Statistics.stdDev))
-        , benchWithFold numElements "stdDev (Data.Fold)"
-            (Fold.stdDev)
+        -- , benchWithFold numElements "stdDev (Data.Fold)"
+        --     (Fold.stdDev)
 
         , benchWithFold numElements "sampleStdDev (window size 100)"
             (Ring.slidingWindow 100 (Statistics.sampleStdDev))

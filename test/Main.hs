@@ -3,8 +3,8 @@
 import Control.Monad.IO.Class (liftIO)
 import Data.Complex (Complex ((:+)))
 import Data.Functor.Classes (liftEq2)
-import Foreign (Storable)
 import Streamly.Internal.Data.Stream.IsStream (SerialT)
+import Streamly.Internal.Data.Unboxed (Unboxed)
 import Test.Hspec.Core.Spec (SpecM)
 import Test.Hspec.QuickCheck (prop)
 import Test.QuickCheck
@@ -16,8 +16,8 @@ import qualified Data.Set as Set
 import qualified Data.Vector as V
 import qualified Statistics.Sample.Powers as STAT
 import qualified Statistics.Transform as STAT
-import qualified Streamly.Internal.Data.Array.Foreign.Mut as MA
-import qualified Streamly.Internal.Data.Array.Foreign.Type as Array
+import qualified Streamly.Internal.Data.Array.Unboxed.Mut as MA
+import qualified Streamly.Internal.Data.Array.Unboxed.Type as Array
 import qualified Streamly.Internal.Data.Fold as Fold
 import qualified Streamly.Internal.Data.Ring.Foreign as Ring
 import qualified Streamly.Internal.Data.Stream.IsStream as Stream
@@ -102,7 +102,7 @@ testFuncKurt = do
 
         (validate $ abs (krt - 1.2762447))
 
-testJackKnife :: (Show a, Eq a, Storable a) =>
+testJackKnife :: (Show a, Eq a, Unboxed a) =>
        (Array.Array a -> SerialT (SpecM ()) a)
     -> [a]
     -> [a]

@@ -182,21 +182,21 @@ import Data.Function ((&))
 import Data.Functor.Identity (runIdentity, Identity)
 import Data.Map.Strict (Map, foldrWithKey)
 import Data.Maybe (fromMaybe)
-import Foreign.Storable (Storable)
 import Streamly.Data.Fold.Tee(Tee(..), toFold)
 import Streamly.Internal.Control.Concurrent (MonadAsync)
-import Streamly.Internal.Data.Array.Foreign.Type
+import Streamly.Internal.Data.Array.Unboxed.Type
     (Array, length, toStream, unsafeIndexIO)
 import Streamly.Internal.Data.Fold.Type (Fold(..), Step(..))
 import Streamly.Internal.Data.Stream.IsStream (SerialT)
 import Streamly.Internal.Data.Stream.StreamD.Step (Step(..))
 import Streamly.Internal.Data.Tuple.Strict (Tuple'(..), Tuple3'(..))
+import Streamly.Internal.Data.Unboxed (Unboxed)
 import Streamly.Internal.Data.Unfold.Type (Unfold(..))
 import System.Random.MWC (createSystemRandom, uniformRM)
 
 import qualified Deque.Strict as Deque
-import qualified Streamly.Internal.Data.Array.Foreign as Array
-import qualified Streamly.Internal.Data.Array.Foreign.Mut as MA
+import qualified Streamly.Internal.Data.Array.Unboxed as Array
+import qualified Streamly.Internal.Data.Array.Unboxed.Mut as MA
 import qualified Streamly.Internal.Data.Fold as Fold
 import qualified Streamly.Internal.Data.Fold.Window as Window
 import qualified Streamly.Internal.Data.Stream.IsStream as Stream
@@ -928,7 +928,7 @@ stdErrMean = Fold.teeWith (\sd n -> sd / sqrt n) sampleStdDev Window.length
 -------------------------------------------------------------------------------
 
 {-# INLINE foldArray #-}
-foldArray :: Storable a => Fold Identity a b -> Array a -> b
+foldArray :: Unboxed a => Fold Identity a b -> Array a -> b
 foldArray f = runIdentity . Stream.fold f . toStream
 
 -- XXX Is this numerically stable? Should we keep the rounding error in the sum
@@ -939,7 +939,7 @@ foldArray f = runIdentity . Stream.fold f . toStream
 -- every time.
 --
 {-# INLINE jackKnifeMean #-}
-jackKnifeMean :: (Monad m, Fractional a, Storable a) => Array a -> SerialT m a
+jackKnifeMean :: (Monad m, Fractional a, Unboxed a) => Array a -> SerialT m a
 jackKnifeMean arr = do
     let len = fromIntegral (length arr - 1)
         s = foldArray Fold.sum arr
@@ -950,7 +950,7 @@ jackKnifeMean arr = do
 -- every time.
 --
 {-# INLINE jackKnifeVariance #-}
-jackKnifeVariance :: (Monad m, Fractional a, Storable a) =>
+jackKnifeVariance :: (Monad m, Fractional a, Unboxed a) =>
     Array a -> SerialT m a
 jackKnifeVariance arr = do
     let len = fromIntegral $ length arr - 1
@@ -962,7 +962,7 @@ jackKnifeVariance arr = do
 -- | Standard deviation computed from 'jackKnifeVariance'.
 --
 {-# INLINE jackKnifeStdDev #-}
-jackKnifeStdDev :: (Monad m, Storable a, Floating a) =>
+jackKnifeStdDev :: (Monad m, Unboxed a, Floating a) =>
     Array a -> SerialT m a
 jackKnifeStdDev = Stream.map sqrt . jackKnifeVariance
 
@@ -972,7 +972,7 @@ jackKnifeStdDev = Stream.map sqrt . jackKnifeVariance
 -- | Randomly select elements from an array, with replacement, producing
 -- a stream of the same size as the original array.
 {-# INLINE resample #-}
-resample :: (MonadIO m, Storable a) => Unfold m (Array a) a
+resample :: (MonadIO m, Unboxed a) => Unfold m (Array a) a
 resample = Unfold step inject
 
     where
@@ -996,7 +996,7 @@ resample = Unfold step inject
 -- resampled stream, producing a stream of fold results. The fold is usually an
 -- estimator fold.
 {-# INLINE foldResamples #-}
-foldResamples :: (MonadAsync m, Storable a) =>
+foldResamples :: (MonadAsync m, Unboxed a) =>
        Int          -- ^ Number of resamples to compute.
     -> Array a      -- ^ Original sample.
     -> Fold m a b   -- ^ Estimator fold
