@@ -74,6 +74,13 @@ let haskellPackages =
                             doHaddock = false;
                           });
 
+                    lockfree-queue =
+                      super.callHackageDirect
+                        { pkg = "lockfree-queue";
+                          ver = "0.2.4";
+                          sha256 = "1bj9agy3x0yjbscpjgn96gpnj4lvkh39spjvy3jnrr3a42v3ynw7";
+                        } {};
+
                     unicode-data =
                       super.callHackageDirect
                         { pkg = "unicode-data";
