@@ -3,12 +3,12 @@ packages: streamly-statistics.cabal
 source-repository-package
     type: git
     location: https://github.com/composewell/streamly.git
-    tag: 301c0a337aea723eedce35c9658c4928a5fb8f32
+    tag: master
 
 source-repository-package
     type: git
     location: https://github.com/composewell/streamly.git
-    tag: 301c0a337aea723eedce35c9658c4928a5fb8f32
+    tag: master
     subdir: core
 
 jobs: 1
