@@ -158,6 +158,7 @@ module Streamly.Statistics
 
     -- ** Probability Distribution
     , frequency
+    , frequency'
     , mode
 
     -- Histograms
@@ -180,7 +181,7 @@ import Data.Bits (Bits(complement, shiftL, shiftR, (.&.), (.|.)))
 import Data.Complex (Complex ((:+)))
 import Data.Function ((&))
 import Data.Functor.Identity (runIdentity, Identity)
-import Data.Map.Strict (Map, foldrWithKey)
+import Data.Map.Strict (Map)
 import Data.Maybe (fromMaybe)
 import Streamly.Data.Fold.Tee(Tee(..), toFold)
 import Streamly.Internal.Control.Concurrent (MonadAsync)
@@ -194,6 +195,7 @@ import Streamly.Internal.Data.Unboxed (Unboxed)
 import Streamly.Internal.Data.Unfold.Type (Unfold(..))
 import System.Random.MWC (createSystemRandom, uniformRM)
 
+import qualified Data.Map.Strict as Map
 import qualified Deque.Strict as Deque
 import qualified Streamly.Internal.Data.Array.Unboxed as Array
 import qualified Streamly.Internal.Data.Array.Unboxed.Mut as MA
@@ -1008,18 +1010,48 @@ foldResamples n arr fld =
 -- Probability Distribution
 -------------------------------------------------------------------------------
 
--- | Determine the frequency of each element in the stream.
+-- XXX We can use a Windowed classifyWith operation, that will allow us to
+-- express windowed frequency, mode, histograms etc idiomatically.
+
+-- | Count the frequency of elements in a sliding window.
+--
+-- >>> input = Stream.fromList [1,1,3,4,4::Int]
+-- >>> f = Ring.slidingWindow 4 Statistics.frequency
+-- >>> Stream.fold f input
+-- fromList [(1,1),(3,1),(4,2)]
 --
 {-# INLINE frequency #-}
-frequency :: (Monad m, Ord a) => Fold m a (Map a Int)
-frequency = Fold.classifyWith id Fold.length
+frequency :: (Monad m, Ord a) => Fold m (a, Maybe a) (Map a Int)
+frequency = Fold.foldl' step Map.empty
+
+    where
+
+    decrement v =
+        if v == 1
+        then Nothing
+        else Just (v - 1)
+
+    step refCountMap (new, mOld) =
+        let m1 = Map.insertWith (+) new 1 refCountMap
+        in case mOld of
+                Just k -> Map.update decrement k m1
+                Nothing -> m1
+
+-- XXX Check if the performance of window frequency is the same as this in the
+-- full case, if so remove this.
+
+-- | Determine the frequency of each element in the stream.
+--
+{-# INLINE frequency' #-}
+frequency' :: (Monad m, Ord a) => Fold m a (Map a Int)
+frequency' = Fold.classifyWith id Fold.length
 
 -- | Find out the most frequently ocurring element in the stream and its
 -- frequency.
 --
 {-# INLINE mode #-}
 mode :: (Monad m, Ord a) => Fold m a (Maybe (a, Int))
-mode = Fold.rmapM findMax frequency
+mode = Fold.rmapM findMax frequency'
 
     where
 
@@ -1028,7 +1060,7 @@ mode = Fold.rmapM findMax frequency
         | v > v1 = Just (k, v)
         | otherwise = old
 
-    findMax = return . foldrWithKey fmax Nothing
+    findMax = return . Map.foldrWithKey fmax Nothing
 
 -------------------------------------------------------------------------------
 -- Histograms

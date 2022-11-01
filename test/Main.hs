@@ -19,7 +19,7 @@ import qualified Statistics.Transform as STAT
 import qualified Streamly.Internal.Data.Array.Unboxed.Mut as MA
 import qualified Streamly.Internal.Data.Array.Unboxed.Type as Array
 import qualified Streamly.Internal.Data.Fold as Fold
-import qualified Streamly.Internal.Data.Ring.Foreign as Ring
+import qualified Streamly.Internal.Data.Ring.Unboxed as Ring
 import qualified Streamly.Internal.Data.Stream.IsStream as Stream
 import qualified Streamly.Prelude as S
 
@@ -153,7 +153,7 @@ testFuncbinFromToN low high n x exp0 = do
 
 testFrequency :: [Int] -> Map.Map Int Int -> Spec
 testFrequency inputList result = do
-    freq <- S.fold frequency $ S.fromList inputList
+    freq <- S.fold frequency' $ S.fromList inputList
     it ("Frequency " ++ show freq) $ liftEq2 (==) (==) freq result
 
 testMode :: [Int] -> Maybe (Int, Int) -> Spec
