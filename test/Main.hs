@@ -3,8 +3,8 @@
 import Control.Monad.IO.Class (liftIO)
 import Data.Complex (Complex ((:+)))
 import Data.Functor.Classes (liftEq2)
-import Streamly.Internal.Data.Stream.IsStream (SerialT)
-import Streamly.Internal.Data.Unboxed (Unboxed)
+import Streamly.Data.Array.Unboxed (Unbox)
+import Streamly.Data.Stream (Stream)
 import Test.Hspec.Core.Spec (SpecM)
 import Test.Hspec.QuickCheck (prop)
 import Test.QuickCheck
@@ -20,8 +20,8 @@ import qualified Streamly.Internal.Data.Array.Unboxed.Mut as MA
 import qualified Streamly.Internal.Data.Array.Unboxed.Type as Array
 import qualified Streamly.Internal.Data.Fold as Fold
 import qualified Streamly.Internal.Data.Ring.Unboxed as Ring
-import qualified Streamly.Internal.Data.Stream.IsStream as Stream
-import qualified Streamly.Prelude as S
+import qualified Streamly.Internal.Data.Stream as Stream
+import qualified Streamly.Data.Stream as S
 
 import Prelude hiding (sum, maximum, minimum)
 
@@ -102,14 +102,14 @@ testFuncKurt = do
 
         (validate $ abs (krt - 1.2762447))
 
-testJackKnife :: (Show a, Eq a, Unboxed a) =>
-       (Array.Array a -> SerialT (SpecM ()) a)
+testJackKnife :: (Show a, Eq a, Unbox a) =>
+       (Array.Array a -> Stream (SpecM ()) a)
     -> [a]
     -> [a]
     -> Spec
 testJackKnife f ls expRes = do
     let arr = Array.fromList ls
-    res <- Stream.toList $ f arr
+    res <- Stream.fold Fold.toList $ f arr
     it ("testJackKnife result should be ="
         ++ show expRes
         ++ " Actual is = " ++show res
@@ -183,7 +183,7 @@ testResample :: [Double] -> Spec
 testResample sample = do
     let sampleArr = Array.fromList sample
         sampleSet = Set.fromList sample
-    resampleList <- runIO $ S.toList $ S.unfold resample sampleArr
+    resampleList <- runIO $ S.fold Fold.toList $ S.unfold resample sampleArr
     let resampleSet = Set.fromList resampleList
         sub = Set.isSubsetOf resampleSet sampleSet
     -- XXX We should not use dynamic output in test description
@@ -193,7 +193,7 @@ testResample sample = do
 testFoldResamples :: Int -> [Double] -> Spec
 testFoldResamples n sample = do
     let arr = Array.fromList sample
-    a <- runIO $ S.toList $ foldResamples n arr Fold.mean
+    a <- runIO $ S.fold Fold.toList $ foldResamples n arr Fold.mean
     -- XXX We should not use dynamic output in test description
     it ("foldResamples " ++ show a) (Prelude.length a == n)
 
@@ -210,7 +210,7 @@ main = hspec $ do
                 let c = S.fromList testCase
                 a <- runIO $ S.fold (Ring.slidingWindow winSize f) c
                 b <- runIO $ S.fold f $ S.drop (numElem - winSize)
-                        $ S.map (, Nothing) c
+                        $ fmap (, Nothing) c
                 let c1 = a - b
                 it ("should not deviate more than " ++ show deviationLimit)
                     $ c1 >= -1 * deviationLimit && c1 <= deviationLimit
@@ -226,8 +226,8 @@ main = hspec $ do
 
             testFunc tc f sI sW = do
                 let c = S.fromList tc
-                a <- runIO $ S.toList $ S.postscan f $ S.map (, Nothing) c
-                b <- runIO $ S.toList $ S.postscan
+                a <- runIO $ S.fold Fold.toList $ S.postscan f $ fmap (, Nothing) c
+                b <- runIO $ S.fold Fold.toList $ S.postscan
                         (Ring.slidingWindow winSize f) c
                 it "Infinite" $ a  == sI
                 it ("Finite " ++ show winSize) $ b == sW

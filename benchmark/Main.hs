@@ -2,27 +2,26 @@
 
 import Control.DeepSeq (NFData)
 import Streamly.Data.Fold (Fold)
-import Streamly.Prelude (SerialT)
+import Streamly.Data.Stream (Stream)
 import System.Random (randomRIO)
 
 import qualified Streamly.Data.Fold as Fold
+import qualified Streamly.Data.Stream as Stream
 import qualified Streamly.Internal.Data.Array.Unboxed.Type as Array
 import qualified Streamly.Internal.Data.Ring.Unboxed as Ring
-import qualified Streamly.Internal.Data.Stream.IsStream.Type as S
-import qualified Streamly.Prelude as Stream
+import qualified Streamly.Internal.Data.Stream as S
 import qualified Streamly.Statistics as Statistics
 
 import Gauge
 
 {-# INLINE source #-}
-source :: (Monad m, Stream.IsStream t, Num a, Stream.Enumerable a) =>
-    Int -> a -> t m a
+source :: (Monad m, Num a, Stream.Enumerable a) => Int -> a -> Stream m a
 source len from =
     Stream.enumerateFromThenTo from (from + 1) (from + fromIntegral len)
 
 {-# INLINE sourceDescending #-}
-sourceDescending :: (Monad m, Stream.IsStream t, Num a, Stream.Enumerable a) =>
-    Int -> a -> t m a
+sourceDescending :: (Monad m, Num a, Stream.Enumerable a) =>
+    Int -> a -> Stream m a
 sourceDescending len from =
     Stream.enumerateFromThenTo
         (from + fromIntegral len)
@@ -30,12 +29,12 @@ sourceDescending len from =
         from
 
 {-# INLINE sourceDescendingInt #-}
-sourceDescendingInt :: (Monad m, Stream.IsStream t) => Int -> Int -> t m Int
+sourceDescendingInt :: Monad m => Int -> Int -> Stream m Int
 sourceDescendingInt = sourceDescending
 
 {-# INLINE benchWith #-}
 benchWith :: (Num a, NFData a) =>
-    (Int -> a -> SerialT IO a) -> Int -> String -> Fold IO a a -> Benchmark
+    (Int -> a -> Stream IO a) -> Int -> String -> Fold IO a a -> Benchmark
 benchWith src len name f =
     bench name
         $ nfIO
@@ -53,21 +52,21 @@ benchWithFoldInt len name f = benchWith source len name f
 benchWithPostscan :: Int -> String -> Fold IO Double Double -> Benchmark
 benchWithPostscan len name f =
   bench name $ nfIO $ randomRIO (1, 1) >>=
-    Stream.drain . Stream.postscan f . source len
+    Stream.fold Fold.drain . Stream.postscan f . source len
 
 {-# INLINE benchWithResample #-}
 benchWithResample :: Int -> String -> Benchmark
 benchWithResample len name = bench name $ nfIO $ do
     i <- randomRIO (1, 1)
-    arr <- Array.fromStreamD (S.toStreamD (source len i :: SerialT IO Double))
-    Stream.drain $ Stream.unfold Statistics.resample arr
+    arr <- Array.fromStreamD (S.toStreamD (source len i :: Stream IO Double))
+    Stream.fold Fold.drain $ Stream.unfold Statistics.resample arr
 
 {-# INLINE benchWithFoldResamples #-}
 benchWithFoldResamples :: Int -> String -> Fold IO Double Double -> Benchmark
 benchWithFoldResamples len name f = bench name $ nfIO $ do
     i <- randomRIO (1, 1)
-    arr <- Array.fromStreamD (S.toStreamD (source len i :: SerialT IO Double))
-    Stream.drain $ Statistics.foldResamples len arr f
+    arr <- Array.fromStreamD (S.toStreamD (source len i :: Stream IO Double))
+    Stream.fold Fold.drain $ Statistics.foldResamples len arr f
 
 {-# INLINE numElements #-}
 numElements :: Int

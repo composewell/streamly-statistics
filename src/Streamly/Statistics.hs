@@ -183,15 +183,14 @@ import Data.Function ((&))
 import Data.Functor.Identity (runIdentity, Identity)
 import Data.Map.Strict (Map)
 import Data.Maybe (fromMaybe)
+import Streamly.Data.Array.Unboxed (Array, length, Unbox)
 import Streamly.Data.Fold.Tee(Tee(..), toFold)
+import Streamly.Data.Stream (Stream)
 import Streamly.Internal.Control.Concurrent (MonadAsync)
-import Streamly.Internal.Data.Array.Unboxed.Type
-    (Array, length, toStream, unsafeIndexIO)
+import Streamly.Internal.Data.Array.Unboxed.Type (unsafeIndexIO)
 import Streamly.Internal.Data.Fold.Type (Fold(..), Step(..))
-import Streamly.Internal.Data.Stream.IsStream (SerialT)
 import Streamly.Internal.Data.Stream.StreamD.Step (Step(..))
 import Streamly.Internal.Data.Tuple.Strict (Tuple'(..), Tuple3'(..))
-import Streamly.Internal.Data.Unboxed (Unboxed)
 import Streamly.Internal.Data.Unfold.Type (Unfold(..))
 import System.Random.MWC (createSystemRandom, uniformRM)
 
@@ -201,7 +200,7 @@ import qualified Streamly.Internal.Data.Array.Unboxed as Array
 import qualified Streamly.Internal.Data.Array.Unboxed.Mut as MA
 import qualified Streamly.Internal.Data.Fold as Fold
 import qualified Streamly.Internal.Data.Fold.Window as Window
-import qualified Streamly.Internal.Data.Stream.IsStream as Stream
+import qualified Streamly.Data.Stream as Stream
 import qualified Streamly.Internal.Data.Unfold as Unfold
 
 import Prelude hiding (length, sum, minimum, maximum)
@@ -767,8 +766,8 @@ md =
             Just action -> do
                 arr <- action
                 Stream.fold Fold.mean
-                    $ Stream.map (\a -> abs (mn - a))
-                    $ Stream.unfold MA.read arr
+                    $ fmap (\a -> abs (mn - a))
+                    $ Stream.unfold MA.reader arr
             Nothing -> return 0.0
 
 -- | The variance \(\sigma^2\) of a population of \(n\) equally likely values
@@ -930,8 +929,8 @@ stdErrMean = Fold.teeWith (\sd n -> sd / sqrt n) sampleStdDev Window.length
 -------------------------------------------------------------------------------
 
 {-# INLINE foldArray #-}
-foldArray :: Unboxed a => Fold Identity a b -> Array a -> b
-foldArray f = runIdentity . Stream.fold f . toStream
+foldArray :: Unbox a => Fold Identity a b -> Array a -> b
+foldArray f = runIdentity . Stream.fold f . Array.read
 
 -- XXX Is this numerically stable? Should we keep the rounding error in the sum
 -- and take it into account when subtracting?
@@ -941,32 +940,32 @@ foldArray f = runIdentity . Stream.fold f . toStream
 -- every time.
 --
 {-# INLINE jackKnifeMean #-}
-jackKnifeMean :: (Monad m, Fractional a, Unboxed a) => Array a -> SerialT m a
+jackKnifeMean :: (Monad m, Fractional a, Unbox a) => Array a -> Stream m a
 jackKnifeMean arr = do
     let len = fromIntegral (length arr - 1)
         s = foldArray Fold.sum arr
-     in Stream.map (\b -> (s - b) / len) $ toStream arr
+     in fmap (\b -> (s - b) / len) $ Array.read arr
 
 -- | Given an array of @n@ items, compute variance of @(n - 1)@ items at a time,
 -- producing a stream of all possible variance values omitting a different item
 -- every time.
 --
 {-# INLINE jackKnifeVariance #-}
-jackKnifeVariance :: (Monad m, Fractional a, Unboxed a) =>
-    Array a -> SerialT m a
+jackKnifeVariance :: (Monad m, Fractional a, Unbox a) =>
+    Array a -> Stream m a
 jackKnifeVariance arr = do
     let len = fromIntegral $ length arr - 1
         foldSums (s, s2) x = (s + x, s2 + x ^ (2 :: Int))
         (sum, sum2) = foldArray (Fold.foldl' foldSums (0.0, 0.0)) arr
         var x = (sum2 - x ^ (2 :: Int)) / len -  ((sum - x) / len) ^ (2::Int)
-     in Stream.map var $ toStream arr
+     in fmap var $ Array.read arr
 
 -- | Standard deviation computed from 'jackKnifeVariance'.
 --
 {-# INLINE jackKnifeStdDev #-}
-jackKnifeStdDev :: (Monad m, Unboxed a, Floating a) =>
-    Array a -> SerialT m a
-jackKnifeStdDev = Stream.map sqrt . jackKnifeVariance
+jackKnifeStdDev :: (Monad m, Unbox a, Floating a) =>
+    Array a -> Stream m a
+jackKnifeStdDev = fmap sqrt . jackKnifeVariance
 
 -- XXX This can be made more modular if the replicateM unfold can take count
 -- from the seed.
@@ -974,7 +973,7 @@ jackKnifeStdDev = Stream.map sqrt . jackKnifeVariance
 -- | Randomly select elements from an array, with replacement, producing
 -- a stream of the same size as the original array.
 {-# INLINE resample #-}
-resample :: (MonadIO m, Unboxed a) => Unfold m (Array a) a
+resample :: (MonadIO m, Unbox a) => Unfold m (Array a) a
 resample = Unfold step inject
 
     where
@@ -998,13 +997,13 @@ resample = Unfold step inject
 -- resampled stream, producing a stream of fold results. The fold is usually an
 -- estimator fold.
 {-# INLINE foldResamples #-}
-foldResamples :: (MonadAsync m, Unboxed a) =>
+foldResamples :: (MonadAsync m, Unbox a) =>
        Int          -- ^ Number of resamples to compute.
     -> Array a      -- ^ Original sample.
     -> Fold m a b   -- ^ Estimator fold
-    -> SerialT m b
+    -> Stream m b
 foldResamples n arr fld =
-    Stream.replicateM n (Unfold.fold fld resample arr)
+    Stream.sequence $ Stream.replicate n (Unfold.fold fld resample arr)
 
 -------------------------------------------------------------------------------
 -- Probability Distribution
@@ -1039,6 +1038,7 @@ frequency = Fold.foldl' step Map.empty
 
 -- XXX Check if the performance of window frequency is the same as this in the
 -- full case, if so remove this.
+-- XXX This is available in the streamly package as well.
 
 -- | Determine the frequency of each element in the stream.
 --
