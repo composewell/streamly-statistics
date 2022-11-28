@@ -183,11 +183,11 @@ import Data.Function ((&))
 import Data.Functor.Identity (runIdentity, Identity)
 import Data.Map.Strict (Map)
 import Data.Maybe (fromMaybe)
-import Streamly.Data.Array.Unboxed (Array, length, Unbox)
+import Streamly.Data.Array (Array, length, Unbox)
 import Streamly.Data.Fold.Tee(Tee(..), toFold)
 import Streamly.Data.Stream (Stream)
 import Streamly.Internal.Control.Concurrent (MonadAsync)
-import Streamly.Internal.Data.Array.Unboxed.Type (unsafeIndexIO)
+import Streamly.Internal.Data.Array.Type (unsafeIndexIO)
 import Streamly.Internal.Data.Fold.Type (Fold(..), Step(..))
 import Streamly.Internal.Data.Stream.StreamD.Step (Step(..))
 import Streamly.Internal.Data.Tuple.Strict (Tuple'(..), Tuple3'(..))
@@ -196,9 +196,10 @@ import System.Random.MWC (createSystemRandom, uniformRM)
 
 import qualified Data.Map.Strict as Map
 import qualified Deque.Strict as Deque
-import qualified Streamly.Internal.Data.Array.Unboxed as Array
-import qualified Streamly.Internal.Data.Array.Unboxed.Mut as MA
+import qualified Streamly.Internal.Data.Array as Array
+import qualified Streamly.Internal.Data.Array.Mut as MA
 import qualified Streamly.Internal.Data.Fold as Fold
+import qualified Streamly.Internal.Data.Fold.Extra as Fold
 import qualified Streamly.Internal.Data.Fold.Window as Window
 import qualified Streamly.Data.Stream as Stream
 import qualified Streamly.Internal.Data.Unfold as Unfold
@@ -757,7 +758,7 @@ range = Fold.teeWith (-) maximum minimum
 md ::  MonadIO m => Fold m ((Double, Maybe Double), m (MA.Array Double)) Double
 md =
     Fold.rmapM computeMD
-        $ Fold.tee (Fold.lmap fst mean) (Fold.lmap snd Fold.last)
+        $ Fold.tee (Fold.lmap fst mean) (Fold.lmap snd Fold.latest)
 
     where
 
