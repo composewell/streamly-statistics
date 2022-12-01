@@ -7,7 +7,7 @@ import System.Random (randomRIO)
 
 import qualified Streamly.Data.Fold as Fold
 import qualified Streamly.Data.Stream as Stream
-import qualified Streamly.Internal.Data.Array.Unboxed.Type as Array
+import qualified Streamly.Internal.Data.Array.Type as Array
 import qualified Streamly.Internal.Data.Ring.Unboxed as Ring
 import qualified Streamly.Internal.Data.Stream as S
 import qualified Streamly.Statistics as Statistics

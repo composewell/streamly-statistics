@@ -3,7 +3,7 @@
 import Control.Monad.IO.Class (liftIO)
 import Data.Complex (Complex ((:+)))
 import Data.Functor.Classes (liftEq2)
-import Streamly.Data.Array.Unboxed (Unbox)
+import Streamly.Data.Array (Unbox)
 import Streamly.Data.Stream (Stream)
 import Test.Hspec.Core.Spec (SpecM)
 import Test.Hspec.QuickCheck (prop)
@@ -16,8 +16,8 @@ import qualified Data.Set as Set
 import qualified Data.Vector as V
 import qualified Statistics.Sample.Powers as STAT
 import qualified Statistics.Transform as STAT
-import qualified Streamly.Internal.Data.Array.Unboxed.Mut as MA
-import qualified Streamly.Internal.Data.Array.Unboxed.Type as Array
+import qualified Streamly.Internal.Data.Array.Mut as MA
+import qualified Streamly.Internal.Data.Array.Type as Array
 import qualified Streamly.Internal.Data.Fold as Fold
 import qualified Streamly.Internal.Data.Ring.Unboxed as Ring
 import qualified Streamly.Internal.Data.Stream as Stream
