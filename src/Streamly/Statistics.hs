@@ -184,7 +184,7 @@ import Data.Functor.Identity (runIdentity, Identity)
 import Data.Map.Strict (Map)
 import Data.Maybe (fromMaybe)
 import Streamly.Data.Array (Array, length, Unbox)
-import Streamly.Data.Fold.Tee(Tee(..), toFold)
+import Streamly.Data.Fold (Tee(..))
 import Streamly.Data.Stream (Stream)
 import Streamly.Internal.Control.Concurrent (MonadAsync)
 import Streamly.Internal.Data.Array.Type (unsafeIndexIO)
@@ -199,7 +199,7 @@ import qualified Deque.Strict as Deque
 import qualified Streamly.Internal.Data.Array as Array
 import qualified Streamly.Internal.Data.Array.Mut as MA
 import qualified Streamly.Internal.Data.Fold as Fold
-import qualified Streamly.Internal.Data.Fold.Extra as Fold
+import qualified Streamly.Internal.Data.Fold.Container as Fold
 import qualified Streamly.Internal.Data.Fold.Window as Window
 import qualified Streamly.Data.Stream as Stream
 import qualified Streamly.Internal.Data.Unfold as Unfold
@@ -834,7 +834,7 @@ stdDev = sqrt <$> variance
 {-# INLINE skewness #-}
 skewness :: (Monad m, Floating a) => Fold m (a, Maybe a) a
 skewness =
-    toFold
+    unTee
         $ (\rm3 sd mu ->
             rm3 / sd ^ (3 :: Int) - 3 * (mu / sd) - (mu / sd) ^ (3 :: Int)
           )
@@ -870,7 +870,7 @@ skewness =
 {-# INLINE kurtosis #-}
 kurtosis :: (Monad m, Floating a) => Fold m (a, Maybe a) a
 kurtosis =
-    toFold
+    unTee
         $ (\rm4 rm3 sd mu ->
              ( 3 * mu ^ (4 :: Int)
             + 6 * mu ^ (2 :: Int) * sd ^ (2 :: Int)
@@ -1045,7 +1045,7 @@ frequency = Fold.foldl' step Map.empty
 --
 {-# INLINE frequency' #-}
 frequency' :: (Monad m, Ord a) => Fold m a (Map a Int)
-frequency' = Fold.classifyWith id Fold.length
+frequency' = Fold.toContainer id Fold.length
 
 -- | Find out the most frequently ocurring element in the stream and its
 -- frequency.
@@ -1149,4 +1149,4 @@ binBoundaries = undefined
 --
 {-# INLINE histogram #-}
 histogram :: (Monad m, Ord k) => (a -> k) -> Fold m a (Map k Int)
-histogram bin = Fold.classifyWith bin Fold.length
+histogram bin = Fold.toContainer bin Fold.length
