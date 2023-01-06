@@ -310,8 +310,8 @@ fft marr
                                 !s = sin a
                                 d  = (c * xi1 - s * yi1) :+ (s * xi1 + c * yi1)
                             ci <- MA.getIndexUnsafe i marr
-                            MA.putIndexUnsafe  i1 (ci - d) marr
-                            MA.putIndexUnsafe  i (ci + d) marr
+                            MA.putIndexUnsafe i1 marr (ci - d)
+                            MA.putIndexUnsafe i marr (ci + d)
                             butterfly (i + l2)
                     butterfly j
             flight 0 0
