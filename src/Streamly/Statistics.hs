@@ -196,10 +196,9 @@ import System.Random.MWC (createSystemRandom, uniformRM)
 
 import qualified Data.Map.Strict as Map
 import qualified Deque.Strict as Deque
+import qualified Streamly.Data.Fold as Fold
 import qualified Streamly.Internal.Data.Array as Array
 import qualified Streamly.Internal.Data.Array.Mut as MA
-import qualified Streamly.Internal.Data.Fold as Fold
-import qualified Streamly.Internal.Data.Fold.Container as Fold
 import qualified Streamly.Internal.Data.Fold.Window as Window
 import qualified Streamly.Data.Stream as Stream
 import qualified Streamly.Internal.Data.Unfold as Unfold
@@ -1045,7 +1044,7 @@ frequency = Fold.foldl' step Map.empty
 --
 {-# INLINE frequency' #-}
 frequency' :: (Monad m, Ord a) => Fold m a (Map a Int)
-frequency' = Fold.toContainer id Fold.length
+frequency' = Fold.toMap id Fold.length
 
 -- | Find out the most frequently ocurring element in the stream and its
 -- frequency.
@@ -1149,4 +1148,4 @@ binBoundaries = undefined
 --
 {-# INLINE histogram #-}
 histogram :: (Monad m, Ord k) => (a -> k) -> Fold m a (Map k Int)
-histogram bin = Fold.toContainer bin Fold.length
+histogram bin = Fold.toMap bin Fold.length
