@@ -6,9 +6,9 @@
 {
   nixpkgs ?
     import (builtins.fetchTarball
-    https://github.com/NixOS/nixpkgs/archive/refs/tags/21.11.tar.gz)
+    https://github.com/NixOS/nixpkgs/archive/refs/tags/22.05.tar.gz)
         {}
-, compiler ? "default"
+, compiler ? "ghc922"
 , c2nix ? "" # cabal2nix CLI options
 # TODO
 #, sources ? [] # e.g. [./. ./benchmark]
@@ -48,7 +48,7 @@ let haskellPackages =
                         #  } {})
                         (let src = fetchGit {
                              url = "git@github.com:composewell/streamly.git";
-                             rev = "deb16f8670a4226f58177d8b1f0d6d840bff4dcd";
+                             rev = "3c3ec6de4831a8667c415393e1dbc351ba508dbe";
                         }; in super.callCabal2nix "streamly" src {})
                         (old:
                           { librarySystemDepends =
@@ -57,13 +57,14 @@ let haskellPackages =
                               else [];
                             enableLibraryProfiling = false;
                             doHaddock = false;
+                            doCheck = false;
                           });
 
                     streamly-core =
                       nixpkgs.haskell.lib.overrideCabal
                         (let src = fetchGit {
                             url = "git@github.com:composewell/streamly.git";
-                            rev = "deb16f8670a4226f58177d8b1f0d6d840bff4dcd";
+                            rev = "3c3ec6de4831a8667c415393e1dbc351ba508dbe";
                         }; in super.callCabal2nix "streamly-core" "${src}/core" {})
                         (old:
                           { librarySystemDepends =
@@ -72,6 +73,7 @@ let haskellPackages =
                               else [];
                             enableLibraryProfiling = false;
                             doHaddock = false;
+                            doCheck = false;
                           });
 
                     lockfree-queue =
@@ -81,19 +83,19 @@ let haskellPackages =
                           sha256 = "1bj9agy3x0yjbscpjgn96gpnj4lvkh39spjvy3jnrr3a42v3ynw7";
                         } {};
 
-                    unicode-data =
-                      super.callHackageDirect
-                        { pkg = "unicode-data";
-                          ver = "0.3.0";
-                          sha256 = "sha256-3R8ZmLoN/oWU0Mr/V4o/90NqiWaE8fprVULgh8/s/Uc=";
-                        } {};
+                    # unicode-data =
+                    #   super.callHackageDirect
+                    #     { pkg = "unicode-data";
+                    #       ver = "0.3.0";
+                    #       sha256 = "sha256-3R8ZmLoN/oWU0Mr/V4o/90NqiWaE8fprVULgh8/s/Uc=";
+                    #     } {};
 
-                    tasty-bench =
-                      super.callHackageDirect
-                        { pkg = "tasty-bench";
-                          ver = "0.3";
-                          sha256 = "0na1q52zr8p1zz8hby4242yjr2zma3js4n91avl7ibsa2y51vrc4";
-                        } {};
+                    # tasty-bench =
+                    #   super.callHackageDirect
+                    #     { pkg = "tasty-bench";
+                    #       ver = "0.3";
+                    #       sha256 = "0na1q52zr8p1zz8hby4242yjr2zma3js4n91avl7ibsa2y51vrc4";
+                    #     } {};
                 };
         };
 
