@@ -269,7 +269,7 @@ logBase2 v0
 -- Array length must be power of 2.
 --
 {-# INLINE fft #-}
-fft :: MonadIO m => MA.Array (Complex Double) -> m ()
+fft :: MonadIO m => MA.MutArray (Complex Double) -> m ()
 fft marr
     | isPower2 len = bitReverse 0 0
     | otherwise  = error "fft: Array length must be power of 2"
@@ -754,7 +754,7 @@ range = Fold.teeWith (-) maximum minimum
 --
 -- /Pre-release/
 {-# INLINE md #-}
-md ::  MonadIO m => Fold m ((Double, Maybe Double), m (MA.Array Double)) Double
+md ::  MonadIO m => Fold m ((Double, Maybe Double), m (MA.MutArray Double)) Double
 md =
     Fold.rmapM computeMD
         $ Fold.tee (Fold.lmap fst mean) (Fold.lmap snd Fold.latest)
