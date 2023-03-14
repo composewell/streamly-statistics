@@ -1,5 +1,5 @@
 # Changelog
 
-## 0.1.0
+## 0.1.0 (Mar 2023)
 
-* First version
+* Initial version

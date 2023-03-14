@@ -1,6 +1,6 @@
 cabal-version:       2.4
 name:                streamly-statistics
-version:             0.1.0.0
+version:             0.1.0
 synopsis: Modular statistics on potentially infinite streams.
 description:
     Use streamly folds to collect statistics on infinite streams in a

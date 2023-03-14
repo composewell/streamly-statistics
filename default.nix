@@ -48,7 +48,7 @@ let haskellPackages =
                         #  } {})
                         (let src = fetchGit {
                              url = "git@github.com:composewell/streamly.git";
-                             rev = "8240f5f870fe47623df99514aed6a542f80c9641";
+                             rev = "9596aea3ab33d3c2fa513247fcfe8604bd7ff454";
                         }; in super.callCabal2nix "streamly" src {})
                         (old:
                           { librarySystemDepends =
@@ -64,7 +64,7 @@ let haskellPackages =
                       nixpkgs.haskell.lib.overrideCabal
                         (let src = fetchGit {
                             url = "git@github.com:composewell/streamly.git";
-                            rev = "8240f5f870fe47623df99514aed6a542f80c9641";
+                            rev = "9596aea3ab33d3c2fa513247fcfe8604bd7ff454";
                         }; in super.callCabal2nix "streamly-core" "${src}/core" {})
                         (old:
                           { librarySystemDepends =

@@ -78,7 +78,7 @@ testStdDev :: Property
 testStdDev = testDistributions STAT.stdDev stdDev
 
 testFuncMD ::
-    Fold.Fold IO ((Double, Maybe Double), IO (MA.Array Double)) Double -> Spec
+    Fold.Fold IO ((Double, Maybe Double), IO (MA.MutArray Double)) Double -> Spec
 testFuncMD f = do
                 let c = S.fromList [10.0, 11.0, 12.0, 14.0]
                 a1 <- runIO $ S.fold (Ring.slidingWindowWith 2 f) c
