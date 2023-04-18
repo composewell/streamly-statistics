@@ -36,13 +36,13 @@ environment:
     # version.
     #STACKVER: "1.6.5"
     STACK_UPGRADE: "y"
-    RESOLVER: "lts-18.28"
+    RESOLVER: "nightly-2023-04-18"
     STACK_ROOT: "c:\\sr"
 
     # ------------------------------------------------------------------------
     # cabal options
     # ------------------------------------------------------------------------
-    CABAL_BUILD_OPTIONS: "--flag interop"
+    #CABAL_BUILD_OPTIONS: "--flag interop"
     CABAL_CHECK_RELAX: "y"
     CABAL_NO_SANDBOX: "y"
     CABAL_HACKAGE_MIRROR: "hackage.haskell.org:http://hackage.fpcomplete.com"
@@ -63,7 +63,7 @@ environment:
     PACKCHECK_LOCAL_PATH: "./packcheck.sh"
     # If you have not committed packcheck.sh in your repo at PACKCHECK_LOCAL_PATH
     # then it is automatically pulled from this URL.
-    PACKCHECK_GITHUB_URL: "https://raw.githubusercontent.com/harendra-kumar/packcheck"
+    PACKCHECK_GITHUB_URL: "https://raw.githubusercontent.com/composewell/packcheck"
     PACKCHECK_GITHUB_COMMIT: "v0.6.0"
 
     # Override the temp directory to avoid sed escaping issues
