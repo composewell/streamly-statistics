@@ -37,44 +37,36 @@ let haskellPackages =
             overrides = self: super:
                 with nixpkgs.haskell.lib;
                 {
-                    streamly-statistics = mkPackage super "streamly-statistics" ./. flags inShell;
+                  streamly-statistics = mkPackage super "streamly-statistics" ./. flags inShell;
 
-                    streamly =
-                      nixpkgs.haskell.lib.overrideCabal
-                        #(super.callHackageDirect
-                        #  { pkg = "streamly";
-                        #    ver = "0.8.2";
-                        #    sha256 = "sha256-CjFq9SCdbgLZa7NqOE4OtC8OaFg4vK8VmIDjGU5rGko=";
-                        #  } {})
-                        (let src = fetchGit {
-                             url = "git@github.com:composewell/streamly.git";
-                             rev = "9596aea3ab33d3c2fa513247fcfe8604bd7ff454";
-                        }; in super.callCabal2nix "streamly" src {})
-                        (old:
-                          { librarySystemDepends =
-                              if builtins.currentSystem == "x86_64-darwin"
-                              then [nixpkgs.darwin.apple_sdk.frameworks.Cocoa]
-                              else [];
-                            enableLibraryProfiling = false;
-                            doHaddock = false;
-                            doCheck = false;
-                          });
+                  streamly-core =
+                      super.callHackageDirect
+                        { pkg = "streamly-core";
+                          ver = "0.1.0";
+                          sha256 = "hoSV6Q2+X5a7hFnJAArqNPjcMaCVyX9Vz4FcxeJ+jgI=";
+                        } {};
+                        #let src = fetchGit {
+                        #    url = "git@github.com:composewell/streamly.git";
+                        #    rev = "8240f5f870fe47623df99514aed6a542f80c9641";
+                        #}; in super.callCabal2nix "streamly-core" "${src}/core" {};
 
-                    streamly-core =
-                      nixpkgs.haskell.lib.overrideCabal
-                        (let src = fetchGit {
-                            url = "git@github.com:composewell/streamly.git";
-                            rev = "9596aea3ab33d3c2fa513247fcfe8604bd7ff454";
-                        }; in super.callCabal2nix "streamly-core" "${src}/core" {})
-                        (old:
-                          { librarySystemDepends =
-                              if builtins.currentSystem == "x86_64-darwin"
-                              then [nixpkgs.darwin.apple_sdk.frameworks.Cocoa]
-                              else [];
-                            enableLibraryProfiling = false;
-                            doHaddock = false;
-                            doCheck = false;
-                          });
+                  streamly =
+                    nixpkgs.haskell.lib.overrideCabal
+                      (super.callHackageDirect
+                        { pkg = "streamly";
+                          ver = "0.9.0";
+                          sha256 = "sha256-eOxVb8qQjZDo1+S7CStqYSExOg2QHWkMY+zlOYqwZak=";
+                        } {})
+                    #  (let src = fetchGit {
+                    #      url = "git@github.com:composewell/streamly.git";
+                    #      rev = "96d222e45cf3aee9b6847c0d14fde967a760fee8";
+                    #  }; in super.callCabal2nix "streamly" src {})
+                      (old:
+                        { librarySystemDepends =
+                            if nixpkgs.lib.strings.hasInfix "darwin" builtins.currentSystem
+                            then [nixpkgs.darwin.apple_sdk.frameworks.Cocoa]
+                            else [];
+                        });
 
                     lockfree-queue =
                       super.callHackageDirect
