@@ -20,7 +20,7 @@ description:
     * Sample statistics, resampling
     * Probablity distribution: frequency, mode, histograms
     * Transforms: Fast fourier transform
-homepage:            https://streamly-statistics.composewell.com
+homepage:            https://streamly.composewell.com
 bug-reports:         https://github.com/composewell/streamly-statistics/issues
 license:             Apache-2.0
 license-file:        LICENSE
