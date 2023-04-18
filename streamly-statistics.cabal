@@ -1,7 +1,8 @@
 cabal-version:       2.4
 name:                streamly-statistics
 version:             0.1.0
-synopsis: Modular statistics on potentially infinite streams.
+synopsis:
+    Statistical measures for finite or infinite data streams.
 description:
     Statistical measures for finite or infinite data streams.
     .
@@ -42,15 +43,10 @@ source-repository head
     type: git
     location: https://github.com/composewell/streamly-statistics
 
-flag use-gauge
-    description: Use gauge instead of tasty-bench for benchmarking
-    manual: True
-    default: False
-
 flag fusion-plugin
-  description: Use fusion plugin for for best performance
+  description: Use fusion plugin for benchmarks
   manual: True
-  default: False
+  default: True
 
 common default-extensions
     default-extensions:
@@ -134,7 +130,7 @@ test-suite test
                       , random         >= 1.0.0 && < 2
                       , containers     >= 0.5   && < 0.7
                       -- XXX Should remove these dependencies
-                      , vector         >= 0.11  && < 0.13
+                      , vector         >= 0.11  && < 0.14
                       , statistics     >= 0.15  && < 0.17
 
 benchmark benchmark
@@ -148,16 +144,12 @@ benchmark benchmark
                       , base           >= 4.9   && < 5
                       , random         >= 1.0.0 && < 2
                       , deepseq        >= 1.4.1 && < 1.5
-
-    if flag(use-gauge)
-      build-depends:  gauge >= 0.2.4 && < 0.3
-    else
-      build-depends:    tasty-bench >= 0.3 && < 0.4
+                      , tasty-bench >= 0.3 && < 0.4
                       , tasty     >= 1.4.1 && < 1.5
-      mixins: tasty-bench
-        (Test.Tasty.Bench as Gauge
-        ,Test.Tasty.Bench as Gauge.Main
-        )
+    mixins: tasty-bench
+      (Test.Tasty.Bench as Gauge
+      ,Test.Tasty.Bench as Gauge.Main
+      )
     if flag(fusion-plugin) && !impl(ghcjs) && !impl(ghc < 8.6)
        cpp-options: -DFUSION_PLUGIN
        ghc-options: -fplugin Fusion.Plugin
