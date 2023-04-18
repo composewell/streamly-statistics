@@ -7,7 +7,7 @@ import System.Random (randomRIO)
 
 import qualified Streamly.Data.Fold as Fold
 import qualified Streamly.Data.Stream as Stream
-import qualified Streamly.Internal.Data.Array.Type as Array
+import qualified Streamly.Data.Array as Array
 import qualified Streamly.Internal.Data.Ring.Unboxed as Ring
 import qualified Streamly.Statistics as Statistics
 
@@ -57,14 +57,14 @@ benchWithPostscan len name f =
 benchWithResample :: Int -> String -> Benchmark
 benchWithResample len name = bench name $ nfIO $ do
     i <- randomRIO (1, 1)
-    arr <- Array.fromStreamD (source len i :: Stream IO Double)
+    arr <- Stream.fold Array.write (source len i :: Stream IO Double)
     Stream.fold Fold.drain $ Stream.unfold Statistics.resample arr
 
 {-# INLINE benchWithFoldResamples #-}
 benchWithFoldResamples :: Int -> String -> Fold IO Double Double -> Benchmark
 benchWithFoldResamples len name f = bench name $ nfIO $ do
     i <- randomRIO (1, 1)
-    arr <- Array.fromStreamD (source len i :: Stream IO Double)
+    arr <- Stream.fold Array.write (source len i :: Stream IO Double)
     Stream.fold Fold.drain $ Statistics.foldResamples len arr f
 
 {-# INLINE numElements #-}

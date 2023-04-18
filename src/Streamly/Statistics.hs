@@ -186,7 +186,6 @@ import Data.Maybe (fromMaybe)
 import Streamly.Data.Array (Array, length, Unbox)
 import Streamly.Data.Fold (Tee(..))
 import Streamly.Data.Stream (Stream)
-import Streamly.Internal.Control.Concurrent (MonadAsync)
 import Streamly.Internal.Data.Array.Type (unsafeIndexIO)
 import Streamly.Internal.Data.Fold.Type (Fold(..), Step(..))
 import Streamly.Internal.Data.Stream.StreamD.Step (Step(..))
@@ -197,11 +196,13 @@ import System.Random.MWC (createSystemRandom, uniformRM)
 import qualified Data.Map.Strict as Map
 import qualified Deque.Strict as Deque
 import qualified Streamly.Data.Fold as Fold
-import qualified Streamly.Internal.Data.Array as Array
+import qualified Streamly.Data.Array as Array hiding (read)
+import qualified Streamly.Internal.Data.Array as Array (read)
+import qualified Streamly.Data.MutArray as MA
 import qualified Streamly.Internal.Data.Array.Mut as MA
+    (getIndexUnsafe, putIndexUnsafe, unsafeSwapIndices)
 import qualified Streamly.Internal.Data.Fold.Window as Window
 import qualified Streamly.Data.Stream as Stream
-import qualified Streamly.Internal.Data.Unfold as Unfold
 
 import Prelude hiding (length, sum, minimum, maximum)
 
@@ -993,17 +994,20 @@ resample = Unfold step inject
             e <- chooseOne g arr len
             return $ Yield e (g, arr, len, idx + 1)
 
+-- XXX Use concurrent combinators
+
 -- | Resample an array multiple times and run the supplied fold on each
 -- resampled stream, producing a stream of fold results. The fold is usually an
 -- estimator fold.
 {-# INLINE foldResamples #-}
-foldResamples :: (MonadAsync m, Unbox a) =>
+foldResamples :: (MonadIO m, Unbox a) =>
        Int          -- ^ Number of resamples to compute.
     -> Array a      -- ^ Original sample.
     -> Fold m a b   -- ^ Estimator fold
     -> Stream m b
 foldResamples n arr fld =
-    Stream.sequence $ Stream.replicate n (Unfold.fold fld resample arr)
+    Stream.sequence
+        $ Stream.replicate n (Stream.fold fld $ Stream.unfold resample arr)
 
 -------------------------------------------------------------------------------
 -- Probability Distribution

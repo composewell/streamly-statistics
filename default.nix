@@ -50,30 +50,30 @@ let haskellPackages =
                         #    rev = "8240f5f870fe47623df99514aed6a542f80c9641";
                         #}; in super.callCabal2nix "streamly-core" "${src}/core" {};
 
-                  streamly =
-                    nixpkgs.haskell.lib.overrideCabal
-                      (super.callHackageDirect
-                        { pkg = "streamly";
-                          ver = "0.9.0";
-                          sha256 = "sha256-eOxVb8qQjZDo1+S7CStqYSExOg2QHWkMY+zlOYqwZak=";
-                        } {})
-                    #  (let src = fetchGit {
-                    #      url = "git@github.com:composewell/streamly.git";
-                    #      rev = "96d222e45cf3aee9b6847c0d14fde967a760fee8";
-                    #  }; in super.callCabal2nix "streamly" src {})
-                      (old:
-                        { librarySystemDepends =
-                            if nixpkgs.lib.strings.hasInfix "darwin" builtins.currentSystem
-                            then [nixpkgs.darwin.apple_sdk.frameworks.Cocoa]
-                            else [];
-                        });
+                  #streamly =
+                  #  nixpkgs.haskell.lib.overrideCabal
+                  #    (super.callHackageDirect
+                  #      { pkg = "streamly";
+                  #        ver = "0.9.0";
+                  #        sha256 = "sha256-eOxVb8qQjZDo1+S7CStqYSExOg2QHWkMY+zlOYqwZak=";
+                  #      } {})
+                  #  #  (let src = fetchGit {
+                  #  #      url = "git@github.com:composewell/streamly.git";
+                  #  #      rev = "96d222e45cf3aee9b6847c0d14fde967a760fee8";
+                  #  #  }; in super.callCabal2nix "streamly" src {})
+                  #    (old:
+                  #      { librarySystemDepends =
+                  #          if nixpkgs.lib.strings.hasInfix "darwin" builtins.currentSystem
+                  #          then [nixpkgs.darwin.apple_sdk.frameworks.Cocoa]
+                  #          else [];
+                  #      });
 
-                    lockfree-queue =
-                      super.callHackageDirect
-                        { pkg = "lockfree-queue";
-                          ver = "0.2.4";
-                          sha256 = "1bj9agy3x0yjbscpjgn96gpnj4lvkh39spjvy3jnrr3a42v3ynw7";
-                        } {};
+                  #  lockfree-queue =
+                  #    super.callHackageDirect
+                  #      { pkg = "lockfree-queue";
+                  #        ver = "0.2.4";
+                  #        sha256 = "1bj9agy3x0yjbscpjgn96gpnj4lvkh39spjvy3jnrr3a42v3ynw7";
+                  #      } {};
 
                     # unicode-data =
                     #   super.callHackageDirect

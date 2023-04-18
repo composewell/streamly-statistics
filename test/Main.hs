@@ -16,11 +16,11 @@ import qualified Data.Set as Set
 import qualified Data.Vector as V
 import qualified Statistics.Sample.Powers as STAT
 import qualified Statistics.Transform as STAT
-import qualified Streamly.Internal.Data.Array.Mut as MA
-import qualified Streamly.Internal.Data.Array.Type as Array
-import qualified Streamly.Internal.Data.Fold as Fold
+import qualified Streamly.Data.Array as Array
+import qualified Streamly.Data.Fold as Fold
+import qualified Streamly.Data.MutArray as MA
 import qualified Streamly.Internal.Data.Ring.Unboxed as Ring
-import qualified Streamly.Internal.Data.Stream as Stream
+import qualified Streamly.Data.Stream as Stream
 import qualified Streamly.Data.Stream as S
 
 import Prelude hiding (sum, maximum, minimum)
