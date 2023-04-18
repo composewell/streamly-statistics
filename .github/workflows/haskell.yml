@@ -99,6 +99,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - name: 9.4.4-linux
+            command: cabal-v2
+            runner: ubuntu-latest
+            ghc_version: 9.4.4
+            cabal_project: cabal.project.Werror
+
           - name: 9.2.2-linux
             command: cabal-v2
             runner: ubuntu-latest

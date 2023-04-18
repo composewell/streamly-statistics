@@ -1085,7 +1085,7 @@ binOffsetSize offset binSize x = (x - offset) `div` binSize
 
 data HistBin a = BelowRange | InRange a | AboveRange deriving (Eq, Show)
 
-instance (Eq a, Ord a) => Ord (HistBin a) where
+instance (Ord a) => Ord (HistBin a) where
     compare BelowRange BelowRange = EQ
     compare BelowRange (InRange _) = LT
     compare BelowRange AboveRange = LT
