@@ -32,7 +32,7 @@ tested-with:
 author: Composewell Technologies
 maintainer: streamly@composewell.com
 copyright: 2019 Composewell Technologies
-category: Streamly, Statistics
+category: Streamly, Statistics, Streaming
 
 extra-source-files:
     CHANGELOG.md
