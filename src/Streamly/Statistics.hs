@@ -22,6 +22,10 @@
 
 -- Resources:
 --
+-- Related:
+-- https://hackage.haskell.org/package/foldl-statistics
+-- https://hackage.haskell.org/package/foldl-incremental
+--
 -- This may be another useful resource for incremental (non-windowed)
 -- computation:
 --
@@ -80,17 +84,17 @@ module Streamly.Statistics
     -- window folds by keeping the second element of the input tuple as
     -- @Nothing@.
     --
-      Window.lmap
+      lmap
     , Window.cumulative
 
     -- * Summary Statistics
     -- | See https://en.wikipedia.org/wiki/Summary_statistics .
 
     -- ** Sums
-    , Window.length
-    , Window.sum
-    , Window.sumInt
-    , Window.powerSum
+    , length
+    , sum
+    , sumInt
+    , powerSum
 
     -- ** Location
     -- | See https://en.wikipedia.org/wiki/Location_parameter .
@@ -183,25 +187,23 @@ import Data.Function ((&))
 import Data.Functor.Identity (runIdentity, Identity)
 import Data.Map.Strict (Map)
 import Data.Maybe (fromMaybe)
-import Streamly.Data.Array (Array, length, Unbox)
+import Streamly.Data.Array (Array, Unbox)
 import Streamly.Data.Fold (Tee(..))
 import Streamly.Data.Stream (Stream)
-import Streamly.Internal.Data.Array.Type (unsafeIndexIO)
-import Streamly.Internal.Data.Fold.Type (Fold(..), Step(..))
-import Streamly.Internal.Data.Stream.StreamD.Step (Step(..))
+import Streamly.Internal.Data.Array (unsafeIndexIO)
+import Streamly.Internal.Data.Fold (Fold(..), Step(..))
+import Streamly.Internal.Data.Stream (Step(..))
 import Streamly.Internal.Data.Tuple.Strict (Tuple'(..), Tuple3'(..))
-import Streamly.Internal.Data.Unfold.Type (Unfold(..))
+import Streamly.Internal.Data.Unfold (Unfold(..))
 import System.Random.MWC (createSystemRandom, uniformRM)
 
 import qualified Data.Map.Strict as Map
 import qualified Deque.Strict as Deque
 import qualified Streamly.Data.Fold as Fold
-import qualified Streamly.Data.Array as Array hiding (read)
-import qualified Streamly.Internal.Data.Array as Array (read)
+import qualified Streamly.Data.Array as Array
 import qualified Streamly.Data.MutArray as MA
-import qualified Streamly.Internal.Data.Array.Mut as MA
-    (getIndexUnsafe, putIndexUnsafe, unsafeSwapIndices)
-import qualified Streamly.Internal.Data.Fold.Window as Window
+import qualified Streamly.Internal.Data.MutArray as MA (unsafeSwapIndices)
+import qualified Streamly.Internal.Data.Fold as Window
 import qualified Streamly.Data.Stream as Stream
 
 import Prelude hiding (length, sum, minimum, maximum)
@@ -214,6 +216,25 @@ import Prelude hiding (length, sum, minimum, maximum)
 --
 -- TODO We have many of these functions in Streamly.Data.Fold as well. Need to
 -- think about deduplication.
+
+-------------------------------------------------------------------------------
+-- Re-exports
+-------------------------------------------------------------------------------
+
+lmap :: (c -> a) -> Fold m (a, Maybe a) b -> Fold m (c, Maybe c) b
+lmap = Window.windowLmap
+
+length :: (Monad m, Num b) => Fold m (a, Maybe a) b
+length = Window.windowLength
+
+sum :: (Monad m, Num a) => Fold m (a, Maybe a) a
+sum = Window.windowSum
+
+sumInt :: (Monad m, Integral a) => Fold m (a, Maybe a) a
+sumInt = Window.windowSumInt
+
+powerSum :: (Monad m, Num a) => Int -> Fold m (a, Maybe a) a
+powerSum = Window.windowPowerSum
 
 -------------------------------------------------------------------------------
 -- Transforms
@@ -329,7 +350,7 @@ fft marr
 --
 -- | The minimum element in a rolling window.
 --
--- For smaller window sizes (< 30) Streamly.Data.Fold.Window.minimum performs
+-- For smaller window sizes (< 30) Streamly.Internal.Data.Fold.windowMinimum performs
 -- better.  If you want to compute the minimum of the entire stream Fold.min
 -- from streamly package would be much faster.
 --
@@ -337,7 +358,7 @@ fft marr
 --
 {-# INLINE minimum #-}
 minimum :: (Monad m, Ord a) => Fold m (a, Maybe a) a
-minimum = Fold step initial extract
+minimum = Fold step initial extract extract
 
     where
 
@@ -389,7 +410,7 @@ minimum = Fold step initial extract
 --
 -- | The maximum element in a rolling window.
 --
--- For smaller window sizes (< 30) Streamly.Data.Fold.Window.maximum performs
+-- For smaller window sizes (< 30) Streamly.Internal.Data.Fold.windowMaximum performs
 -- better.  If you want to compute the maximum of the entire stream
 -- Streamly.Data.Fold.maximum from streamly package would be much faster.
 --
@@ -397,7 +418,7 @@ minimum = Fold step initial extract
 --
 {-# INLINE maximum #-}
 maximum :: (Monad m, Ord a) => Fold m (a, Maybe a) a
-maximum = Fold step initial extract
+maximum = Fold step initial extract extract
 
     where
 
@@ -469,7 +490,7 @@ maximum = Fold step initial extract
 -- /Time/: \(\mathcal{O}(n)\)
 {-# INLINE mean #-}
 mean :: forall m a. (Monad m, Fractional a) => Fold m (a, Maybe a) a
-mean = Window.mean
+mean = Window.windowMean
 
 -- | Recompute mean from old mean when an item is removed from the sample.
 {-# INLINE _meanSubtract #-}
@@ -511,7 +532,7 @@ meanReplace n oldMean oldItem newItem =
 -- /Internal/
 {-# INLINE welfordMean #-}
 welfordMean :: forall m a. (Monad m, Fractional a) => Fold m (a, Maybe a) a
-welfordMean = Fold step initial extract
+welfordMean = Fold step initial extract extract
 
     where
 
@@ -543,7 +564,7 @@ welfordMean = Fold step initial extract
 --
 -- \(\mu'_k = \frac{\sum_{i=1}^n x_{i}^k}{n}\)
 --
--- >>> rawMoment k = Fold.teeWith (/) (powerSum p) length
+-- >>> rawMoment k = Fold.teeWith (/) (Fold.windowPowerSum p) Fold.windowLength
 --
 -- See https://en.wikipedia.org/wiki/Moment_(mathematics) .
 --
@@ -552,16 +573,17 @@ welfordMean = Fold step initial extract
 -- /Time/: \(\mathcal{O}(n)\)
 {-# INLINE rawMoment #-}
 rawMoment :: (Monad m, Fractional a) => Int -> Fold m (a, Maybe a) a
-rawMoment k = Fold.teeWith (/) (Window.powerSum k) Window.length
+rawMoment k = Fold.teeWith (/) (Window.windowPowerSum k) Window.windowLength
 
 -- | Like 'rawMoment' but powers can be negative or fractional. This is
 -- slower than 'rawMoment' for positive intergal powers.
 --
--- >>> rawMomentFrac p = Fold.teeWith (/) (powerSumFrac p) length
+-- >>> rawMomentFrac p = Fold.teeWith (/) (Fold.windowPowerSumFrac p) Fold.windowLength
 --
 {-# INLINE rawMomentFrac #-}
 rawMomentFrac :: (Monad m, Floating a) => a -> Fold m (a, Maybe a) a
-rawMomentFrac k = Fold.teeWith (/) (Window.powerSumFrac k) Window.length
+rawMomentFrac k =
+    Fold.teeWith (/) (Window.windowPowerSumFrac k) Window.windowLength
 
 -- XXX Overflow can happen when large powers or large numbers are used. We can
 -- keep a running mean instead of running sum but that won't mitigate the
@@ -608,7 +630,9 @@ powerMeanFrac k = (** (1 / k)) <$> rawMomentFrac k
 --
 {-# INLINE harmonicMean #-}
 harmonicMean :: (Monad m, Fractional a) => Fold m (a, Maybe a) a
-harmonicMean = Fold.teeWith (/) Window.length (Window.lmap recip Window.sum)
+harmonicMean =
+    Fold.teeWith (/)
+        Window.windowLength (Window.windowLmap recip Window.windowSum)
 
 -- | Geometric mean, defined as:
 --
@@ -625,7 +649,7 @@ harmonicMean = Fold.teeWith (/) Window.length (Window.lmap recip Window.sum)
 -- See https://en.wikipedia.org/wiki/Geometric_mean .
 {-# INLINE geometricMean #-}
 geometricMean :: (Monad m, Floating a) => Fold m (a, Maybe a) a
-geometricMean = exp <$> Window.lmap log mean
+geometricMean = exp <$> Window.windowLmap log mean
 
 -- | The quadratic mean or root mean square (rms) of the numbers
 -- \(x_1, x_2, \ldots, x_n\) is defined as:
@@ -685,8 +709,9 @@ ewma k = extract <$> Fold.foldl' step (Tuple' 0 1)
 
     extract (Tuple' x _) = x
 
--- XXX It can perhaps perform better if implemented as a custom fold?
---
+-- XXX It can perhaps perform better if implemented as a custom fold? We can
+-- also enable this to be used as a scan that way.
+
 -- | @ewma n k@ is like 'ewma' but uses the mean of the first @n@ values and
 -- then uses that as the initial value for the @ewma@ of the rest of the
 -- values.
@@ -694,6 +719,7 @@ ewma k = extract <$> Fold.foldl' step (Tuple' 0 1)
 -- This can be used to reduce the effect of volatility of the initial value
 -- when k is too small.
 --
+-- Note that this cannot be used as a scan.
 {-# INLINE ewmaAfterMean #-}
 ewmaAfterMean :: Monad m => Int -> Double -> Fold m Double Double
 ewmaAfterMean n k =
@@ -897,7 +923,8 @@ kurtosis =
 --
 {-# INLINE sampleVariance #-}
 sampleVariance :: (Monad m, Fractional a) => Fold m (a, Maybe a) a
-sampleVariance = Fold.teeWith (\n s2 -> n * s2 / (n - 1)) Window.length variance
+sampleVariance =
+    Fold.teeWith (\n s2 -> n * s2 / (n - 1)) Window.windowLength variance
 
 -- | Sample standard deviation:
 --
@@ -923,7 +950,8 @@ sampleStdDev = sqrt <$> sampleVariance
 -- /Time/: \(\mathcal{O}(n)\)
 {-# INLINE stdErrMean #-}
 stdErrMean :: (Monad m, Floating a) => Fold m (a, Maybe a) a
-stdErrMean = Fold.teeWith (\sd n -> sd / sqrt n) sampleStdDev Window.length
+stdErrMean =
+    Fold.teeWith (\sd n -> sd / sqrt n) sampleStdDev Window.windowLength
 
 -------------------------------------------------------------------------------
 -- Resampling
@@ -943,7 +971,7 @@ foldArray f = runIdentity . Stream.fold f . Array.read
 {-# INLINE jackKnifeMean #-}
 jackKnifeMean :: (Monad m, Fractional a, Unbox a) => Array a -> Stream m a
 jackKnifeMean arr = do
-    let len = fromIntegral (length arr - 1)
+    let len = fromIntegral (Array.length arr - 1)
         s = foldArray Fold.sum arr
      in fmap (\b -> (s - b) / len) $ Array.read arr
 
@@ -955,10 +983,10 @@ jackKnifeMean arr = do
 jackKnifeVariance :: (Monad m, Fractional a, Unbox a) =>
     Array a -> Stream m a
 jackKnifeVariance arr = do
-    let len = fromIntegral $ length arr - 1
+    let len = fromIntegral $ Array.length arr - 1
         foldSums (s, s2) x = (s + x, s2 + x ^ (2 :: Int))
-        (sum, sum2) = foldArray (Fold.foldl' foldSums (0.0, 0.0)) arr
-        var x = (sum2 - x ^ (2 :: Int)) / len -  ((sum - x) / len) ^ (2::Int)
+        (sum1, sum2) = foldArray (Fold.foldl' foldSums (0.0, 0.0)) arr
+        var x = (sum2 - x ^ (2 :: Int)) / len -  ((sum1 - x) / len) ^ (2::Int)
      in fmap var $ Array.read arr
 
 -- | Standard deviation computed from 'jackKnifeVariance'.
@@ -981,7 +1009,7 @@ resample = Unfold step inject
 
     inject arr = liftIO $ do
         g <- createSystemRandom
-        return $ (g, arr, length arr, 0)
+        return $ (g, arr, Array.length arr, 0)
 
     chooseOne g arr len = do
         i <- uniformRM (0, len - 1) g

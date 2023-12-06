@@ -8,7 +8,7 @@ import System.Random (randomRIO)
 import qualified Streamly.Data.Fold as Fold
 import qualified Streamly.Data.Stream as Stream
 import qualified Streamly.Data.Array as Array
-import qualified Streamly.Internal.Data.Ring.Unboxed as Ring
+import qualified Streamly.Internal.Data.Ring as Ring
 import qualified Streamly.Statistics as Statistics
 
 import Gauge
@@ -169,8 +169,9 @@ mkBenchmarks mkBench =
 
     , mkBench numElements "ewma (entire stream)"
         (Statistics.ewma 0.5)
-    , mkBench numElements "ewmaAfterMean (entire stream)"
-        (Statistics.ewmaAfterMean 10 0.5)
+    -- XXX Disabled because this is not scannable
+    -- , mkBench numElements "ewmaAfterMean (entire stream)"
+    --     (Statistics.ewmaAfterMean 10 0.5)
     , mkBench numElements "ewmaRampUpSmoothing (entire stream)"
         (Statistics.ewmaRampUpSmoothing 0.5 0.5)
 

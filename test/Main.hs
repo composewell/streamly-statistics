@@ -19,7 +19,7 @@ import qualified Statistics.Transform as STAT
 import qualified Streamly.Data.Array as Array
 import qualified Streamly.Data.Fold as Fold
 import qualified Streamly.Data.MutArray as MA
-import qualified Streamly.Internal.Data.Ring.Unboxed as Ring
+import qualified Streamly.Internal.Data.Ring as Ring
 import qualified Streamly.Data.Stream as Stream
 import qualified Streamly.Data.Stream as S
 

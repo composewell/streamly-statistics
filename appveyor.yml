@@ -36,7 +36,7 @@ environment:
     # version.
     #STACKVER: "1.6.5"
     STACK_UPGRADE: "y"
-    RESOLVER: "nightly-2023-04-18"
+    RESOLVER: "nightly-2023-12-07"
     STACK_ROOT: "c:\\sr"
 
     # ------------------------------------------------------------------------
