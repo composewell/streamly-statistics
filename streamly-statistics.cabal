@@ -109,8 +109,8 @@ library
     import: ghc-options
     exposed-modules:     Streamly.Statistics
     build-depends:       base     >= 4.9 && < 5
-                       , streamly-core >= 0.2.0
-                       , containers  >= 0.5   && < 0.7
+                       , streamly-core >= 0.3.0
+                       , containers  >= 0.5   && < 0.8
                        , random >= 1.2 && < 1.3
                        , mwc-random >= 0.15 && < 0.16
                        , deque      >= 0.4.4 && < 0.4.5
@@ -122,13 +122,13 @@ test-suite test
     hs-source-dirs:     test
     main-is:            Main.hs
     build-depends:      streamly-statistics
-                      , streamly-core >= 0.2.0
+                      , streamly-core >= 0.3.0
                       , base           >= 4.9   && < 5
-                      , QuickCheck     >= 2.10  && < 2.15
+                      , QuickCheck     >= 2.10  && < 2.16
                       , hspec          >= 2.0   && < 3
                       , hspec-core     >= 2.0   && < 3
                       , random         >= 1.0.0 && < 2
-                      , containers     >= 0.5   && < 0.7
+                      , containers     >= 0.5   && < 0.8
                       -- XXX Should remove these dependencies
                       , vector         >= 0.11  && < 0.14
                       , statistics     >= 0.15  && < 0.17
@@ -140,12 +140,12 @@ benchmark benchmark
     hs-source-dirs:   benchmark
     main-is:          Main.hs
     build-depends:      streamly-statistics
-                      , streamly-core >= 0.2.0
+                      , streamly-core >= 0.3.0
                       , base           >= 4.9   && < 5
                       , random         >= 1.0.0 && < 2
-                      , deepseq        >= 1.4.1 && < 1.5
-                      , tasty-bench >= 0.3 && < 0.4
-                      , tasty     >= 1.4.1 && < 1.5
+                      , deepseq        >= 1.4.1 && < 1.6
+                      , tasty-bench >= 0.3 && < 0.5
+                      , tasty     >= 1.4.1 && < 1.6
     mixins: tasty-bench
       (Test.Tasty.Bench as Gauge
       ,Test.Tasty.Bench as Gauge.Main

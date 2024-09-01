@@ -202,7 +202,8 @@ import qualified Deque.Strict as Deque
 import qualified Streamly.Data.Fold as Fold
 import qualified Streamly.Data.Array as Array
 import qualified Streamly.Data.MutArray as MA
-import qualified Streamly.Internal.Data.MutArray as MA (unsafeSwapIndices)
+import qualified Streamly.Internal.Data.MutArray as MA
+    (unsafeSwapIndices, unsafeGetIndex, unsafePutIndex)
 import qualified Streamly.Internal.Data.Fold as Window
 import qualified Streamly.Data.Stream as Stream
 
@@ -326,13 +327,13 @@ fft marr
                     let butterfly i | i >= len  = flight (j + 1) (a + e)
                                     | otherwise = do
                             let i1 = i + l1
-                            xi1 :+ yi1 <- MA.getIndexUnsafe i1 marr
+                            xi1 :+ yi1 <- MA.unsafeGetIndex i1 marr
                             let !c = cos a
                                 !s = sin a
                                 d  = (c * xi1 - s * yi1) :+ (s * xi1 + c * yi1)
-                            ci <- MA.getIndexUnsafe i marr
-                            MA.putIndexUnsafe i1 marr (ci - d)
-                            MA.putIndexUnsafe i marr (ci + d)
+                            ci <- MA.unsafeGetIndex i marr
+                            MA.unsafePutIndex i1 marr (ci - d)
+                            MA.unsafePutIndex i marr (ci + d)
                             butterfly (i + l2)
                     butterfly j
             flight 0 0
