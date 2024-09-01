@@ -107,7 +107,9 @@ common ghc-options
 
 library
     import: ghc-options
-    exposed-modules:     Streamly.Statistics
+    exposed-modules:
+        Streamly.Statistics
+      , Streamly.Statistics.Scanl
     build-depends:       base     >= 4.9 && < 5
                        , streamly-core >= 0.3.0
                        , containers  >= 0.5   && < 0.8
