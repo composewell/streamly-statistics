@@ -222,18 +222,25 @@ import Prelude hiding (length, sum, minimum, maximum)
 -- Re-exports
 -------------------------------------------------------------------------------
 
+-- XXX Deprecate these once the streamly functions are released.
+
+-- {-# DEPRECATED lmap "Use Streamly.Data.Fold.windowLmap instead" #-}
 lmap :: (c -> a) -> Fold m (a, Maybe a) b -> Fold m (c, Maybe c) b
 lmap = Window.windowLmap
 
+-- {-# DEPRECATED length "Use Streamly.Data.Fold.windowLength instead" #-}
 length :: (Monad m, Num b) => Fold m (a, Maybe a) b
 length = Window.windowLength
 
+-- {-# DEPRECATED sum "Use Streamly.Data.Fold.windowSum instead" #-}
 sum :: (Monad m, Num a) => Fold m (a, Maybe a) a
 sum = Window.windowSum
 
+-- {-# DEPRECATED sumInt "Use Streamly.Data.Fold.windowSumInt instead" #-}
 sumInt :: (Monad m, Integral a) => Fold m (a, Maybe a) a
 sumInt = Window.windowSumInt
 
+-- {-# DEPRECATED powerSum "Use Streamly.Data.Fold.windowPowerSum instead" #-}
 powerSum :: (Monad m, Num a) => Int -> Fold m (a, Maybe a) a
 powerSum = Window.windowPowerSum
 
@@ -341,6 +348,10 @@ fft marr
 -------------------------------------------------------------------------------
 -- Location
 -------------------------------------------------------------------------------
+
+-- XXX prefix window to these folds and implement these using the scans. or
+-- just remove these as the corresponding scans can be converted to folds. If
+-- we remove these we can just export the scans through this module itself.
 
 -- Theoretically, we can approximate minimum in a rolling window by using a
 -- 'powerMean' with sufficiently large negative power.
