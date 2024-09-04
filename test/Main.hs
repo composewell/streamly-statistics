@@ -18,10 +18,13 @@ import qualified Statistics.Sample.Powers as STAT
 import qualified Statistics.Transform as STAT
 import qualified Streamly.Data.Array as Array
 import qualified Streamly.Data.Fold as Fold
+import qualified Streamly.Internal.Data.Fold as Fold
+    (windowFold, windowFoldWith)
 import qualified Streamly.Data.MutArray as MA
-import qualified Streamly.Internal.Data.Ring as Ring
 import qualified Streamly.Data.Stream as Stream
 import qualified Streamly.Data.Stream as S
+import qualified Streamly.Internal.Data.Scanl as Scanl
+import qualified Streamly.Statistics.Scanl as Stat
 
 import Prelude hiding (sum, maximum, minimum)
 
@@ -68,7 +71,7 @@ testDistributions func fld =
                 let var2 = func . STAT.powers 2 $ V.fromList ls
                     strm = S.fromList ls
                 var1 <-
-                    liftIO $ S.fold (Ring.slidingWindow list_length fld) strm
+                    liftIO $ S.fold (Fold.windowFold list_length fld) strm
                 assert (validate $ abs (var1 - var2))
 
 testVariance :: Property
@@ -81,9 +84,9 @@ testFuncMD ::
     Fold.Fold IO ((Double, Maybe Double), IO (MA.MutArray Double)) Double -> Spec
 testFuncMD f = do
                 let c = S.fromList [10.0, 11.0, 12.0, 14.0]
-                a1 <- runIO $ S.fold (Ring.slidingWindowWith 2 f) c
-                a2 <- runIO $ S.fold (Ring.slidingWindowWith 3 f) c
-                a3 <- runIO $ S.fold (Ring.slidingWindowWith 4 f) c
+                a1 <- runIO $ S.fold (Fold.windowFoldWith 2 f) c
+                a2 <- runIO $ S.fold (Fold.windowFoldWith 3 f) c
+                a3 <- runIO $ S.fold (Fold.windowFoldWith 4 f) c
                 it ("MD should be 1.0 , 1.1111111111111114 , 1.25 but actual is "
                     ++ show a1 ++ " " ++ show a2 ++ " " ++ show a3)
                     (  validate (abs (a1 - 1.0))
@@ -95,7 +98,7 @@ testFuncKurt :: Spec
 testFuncKurt = do
     let c = S.fromList
             [21.3 :: Double, 38.4, 12.7, 41.6]
-    krt <- runIO $ S.fold (Ring.slidingWindow 4 kurtosis) c
+    krt <- runIO $ S.fold (Fold.windowFold 4 kurtosis) c
     it ( "kurtosis should be 1.2762447351370185 Actual is " ++
         show krt
         )
@@ -208,7 +211,7 @@ main = hspec $ do
             deviationLimit = 1
             testFunc f = do
                 let c = S.fromList testCase
-                a <- runIO $ S.fold (Ring.slidingWindow winSize f) c
+                a <- runIO $ S.fold (Fold.windowFold winSize f) c
                 b <- runIO $ S.fold f $ S.drop (numElem - winSize)
                         $ fmap (, Nothing) c
                 let c1 = a - b
@@ -226,9 +229,13 @@ main = hspec $ do
 
             testFunc tc f sI sW = do
                 let c = S.fromList tc
-                a <- runIO $ S.fold Fold.toList $ S.postscan f $ fmap (, Nothing) c
-                b <- runIO $ S.fold Fold.toList $ S.postscan
-                        (Ring.slidingWindow winSize f) c
+                a <- runIO
+                        $ S.fold Fold.toList
+                        $ S.postscanl f
+                        $ fmap (, Nothing) c
+                b <- runIO
+                        $ S.fold Fold.toList
+                        $ S.postscanl (Scanl.windowScan winSize f) c
                 it "Infinite" $ a  == sI
                 it ("Finite " ++ show winSize) $ b == sW
 
@@ -254,27 +261,27 @@ main = hspec $ do
         describe "minimum" $ do
             let scanInf = [31, 31, 31, 26, 26, 26, 26] :: [Double]
                 scanWin = [31, 31, 31, 26, 26, 26, 53] :: [Double]
-            testFunc testCase1 minimum scanInf scanWin
+            testFunc testCase1 Stat.windowMinimum scanInf scanWin
         describe "maximum" $ do
             let scanInf = [31, 41, 59, 59, 59, 59, 97] :: [Double]
                 scanWin = [31, 41, 59, 59, 59, 58, 97] :: [Double]
-            testFunc testCase1 maximum scanInf scanWin
+            testFunc testCase1 Stat.windowMaximum scanInf scanWin
         describe "range" $ do
             let scanInf = [0, 10, 28, 33, 33, 33, 71] :: [Double]
                 scanWin = [0, 10, 28, 33, 33, 32, 44] :: [Double]
-            testFunc testCase1 range scanInf scanWin
+            testFunc testCase1 Stat.windowRange scanInf scanWin
         describe "sum" $ do
             let scanInf = [1, 2, 3, 4, 5, 12] :: [Double]
                 scanWin = [1, 2, 3, 3, 3, 9] :: [Double]
-            testFunc testCase2 sum scanInf scanWin
+            testFunc testCase2 Scanl.windowSum scanInf scanWin
         describe "mean" $ do
             let scanInf = [1, 1, 1, 1, 1, 2] :: [Double]
                 scanWin = [1, 1, 1, 1, 1, 3] :: [Double]
-            testFunc testCase2 mean scanInf scanWin
+            testFunc testCase2 Scanl.windowMean scanInf scanWin
         describe "welfordMean" $ do
             let scanInf = [1, 1, 1, 1, 1, 2] :: [Double]
                 scanWin = [1, 1, 1, 1, 1, 3] :: [Double]
-            testFunc testCase2 welfordMean scanInf scanWin
+            testFunc testCase2 Stat.windowWelfordMean scanInf scanWin
 
         -- Probability Distribution
         describe "frequency"
