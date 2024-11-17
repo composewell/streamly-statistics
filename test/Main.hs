@@ -5,6 +5,7 @@ import Data.Complex (Complex ((:+)))
 import Data.Functor.Classes (liftEq2)
 import Streamly.Data.Array (Unbox)
 import Streamly.Data.Stream (Stream)
+import Streamly.Internal.Data.Scanl (Incr(..))
 import Test.Hspec.Core.Spec (SpecM)
 import Test.Hspec.QuickCheck (prop)
 import Test.QuickCheck
@@ -18,9 +19,8 @@ import qualified Statistics.Sample.Powers as STAT
 import qualified Statistics.Transform as STAT
 import qualified Streamly.Data.Array as Array
 import qualified Streamly.Data.Fold as Fold
-import qualified Streamly.Internal.Data.Fold as Fold
-    (windowFold, windowFoldWith)
 import qualified Streamly.Data.MutArray as MA
+import qualified Streamly.Internal.Data.RingArray as Ring
 import qualified Streamly.Data.Stream as Stream
 import qualified Streamly.Data.Stream as S
 import qualified Streamly.Internal.Data.Scanl as Scanl
@@ -71,7 +71,7 @@ testDistributions func fld =
                 let var2 = func . STAT.powers 2 $ V.fromList ls
                     strm = S.fromList ls
                 var1 <-
-                    liftIO $ S.fold (Fold.windowFold list_length fld) strm
+                    liftIO $ S.fold (Ring.slidingWindow list_length fld) strm
                 assert (validate $ abs (var1 - var2))
 
 testVariance :: Property
@@ -84,9 +84,9 @@ testFuncMD ::
     Fold.Fold IO ((Double, Maybe Double), IO (MA.MutArray Double)) Double -> Spec
 testFuncMD f = do
                 let c = S.fromList [10.0, 11.0, 12.0, 14.0]
-                a1 <- runIO $ S.fold (Fold.windowFoldWith 2 f) c
-                a2 <- runIO $ S.fold (Fold.windowFoldWith 3 f) c
-                a3 <- runIO $ S.fold (Fold.windowFoldWith 4 f) c
+                a1 <- runIO $ S.fold (Ring.slidingWindowWith 2 f) c
+                a2 <- runIO $ S.fold (Ring.slidingWindowWith 3 f) c
+                a3 <- runIO $ S.fold (Ring.slidingWindowWith 4 f) c
                 it ("MD should be 1.0 , 1.1111111111111114 , 1.25 but actual is "
                     ++ show a1 ++ " " ++ show a2 ++ " " ++ show a3)
                     (  validate (abs (a1 - 1.0))
@@ -98,7 +98,7 @@ testFuncKurt :: Spec
 testFuncKurt = do
     let c = S.fromList
             [21.3 :: Double, 38.4, 12.7, 41.6]
-    krt <- runIO $ S.fold (Fold.windowFold 4 kurtosis) c
+    krt <- runIO $ S.fold (Ring.slidingWindow 4 kurtosis) c
     it ( "kurtosis should be 1.2762447351370185 Actual is " ++
         show krt
         )
@@ -203,19 +203,30 @@ testFoldResamples n sample = do
 main :: IO ()
 main = hspec $ do
     describe "Numerical stability while streaming" $ do
-        let numElem = 80000
-            winSize = 800
-            testCaseChunk = [9007199254740992, 1, 1.0 :: Double,
-                                9007199254740992, 1, 1, 1, 9007199254740992]
-            testCase = take numElem $ cycle testCaseChunk
+        let winSize = 800
+            numElem = winSize * 100
+            segment =
+                [ 9007199254740992
+                , 1
+                , 1.0 :: Double
+                , 9007199254740992
+                , 1
+                , 1
+                , 1
+                , 9007199254740992
+                ]
+            input = take numElem $ cycle segment
             deviationLimit = 1
             testFunc f = do
-                let c = S.fromList testCase
-                a <- runIO $ S.fold (Fold.windowFold winSize f) c
-                b <- runIO $ S.fold f $ S.drop (numElem - winSize)
-                        $ fmap (, Nothing) c
+                let c = S.fromList input
+                a <- runIO $ S.fold (Ring.slidingWindow winSize f) c
+                b <- runIO $ S.fold f $ S.take winSize $ fmap (, Nothing) c
                 let c1 = a - b
-                it ("should not deviate more than " ++ show deviationLimit)
+                it ("deviation " ++ show c1 ++ " should not be more than "
+                    ++ show deviationLimit
+                    ++ " one window fold = " ++ show b
+                    ++ " rolling window fold = " ++ show a
+                    )
                     $ c1 >= -1 * deviationLimit && c1 <= deviationLimit
 
         describe "Sum" $ testFunc sum
@@ -232,10 +243,10 @@ main = hspec $ do
                 a <- runIO
                         $ S.fold Fold.toList
                         $ S.postscanl f
-                        $ fmap (, Nothing) c
+                        $ fmap Insert c
                 b <- runIO
                         $ S.fold Fold.toList
-                        $ S.postscanl (Scanl.windowScan winSize f) c
+                        $ S.postscanl (Scanl.incrScan winSize f) c
                 it "Infinite" $ a  == sI
                 it ("Finite " ++ show winSize) $ b == sW
 
@@ -273,11 +284,11 @@ main = hspec $ do
         describe "sum" $ do
             let scanInf = [1, 2, 3, 4, 5, 12] :: [Double]
                 scanWin = [1, 2, 3, 3, 3, 9] :: [Double]
-            testFunc testCase2 Scanl.windowSum scanInf scanWin
+            testFunc testCase2 Scanl.incrSum scanInf scanWin
         describe "mean" $ do
             let scanInf = [1, 1, 1, 1, 1, 2] :: [Double]
                 scanWin = [1, 1, 1, 1, 1, 3] :: [Double]
-            testFunc testCase2 Scanl.windowMean scanInf scanWin
+            testFunc testCase2 Scanl.incrMean scanInf scanWin
         describe "welfordMean" $ do
             let scanInf = [1, 1, 1, 1, 1, 2] :: [Double]
                 scanWin = [1, 1, 1, 1, 1, 3] :: [Double]

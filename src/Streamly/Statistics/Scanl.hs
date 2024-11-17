@@ -95,13 +95,13 @@ import Data.Function ((&))
 import Data.Map.Strict (Map)
 import Data.Maybe (fromMaybe)
 import Streamly.Internal.Data.Fold (Step(..))
-import Streamly.Internal.Data.Scanl (Scanl(..))
+import Streamly.Internal.Data.Scanl (Scanl(..), Incr(..))
 import Streamly.Internal.Data.Tuple.Strict (Tuple'(..), Tuple3'(..))
 
 import qualified Data.Map.Strict as Map
 import qualified Deque.Strict as Deque
 import qualified Streamly.Data.Fold as Fold
-import qualified Streamly.Data.MutArray as MA
+import qualified Streamly.Internal.Data.RingArray as Ring
 import qualified Streamly.Internal.Data.Scanl as Scanl
 import qualified Streamly.Data.Stream as Stream
 
@@ -136,7 +136,7 @@ import Prelude hiding (length, sum, minimum, maximum)
 -- /Time/: \(\mathcal{O}(n*w)\) where \(w\) is the window size.
 --
 {-# INLINE windowMinimum #-}
-windowMinimum :: (Monad m, Ord a) => Scanl m (a, Maybe a) a
+windowMinimum :: (Monad m, Ord a) => Scanl m (Incr a) a
 windowMinimum = Scanl step initial extract extract
 
     where
@@ -146,19 +146,18 @@ windowMinimum = Scanl step initial extract extract
             $ Partial
             $ Tuple3' (0 :: Int) (0 :: Int) (mempty :: Deque.Deque (Int, a))
 
-    step (Tuple3' i w q) (a, ma) =
-        case ma of
-            Nothing ->
+    step (Tuple3' i w q) (Insert a) =
                 return
                     $ Partial
                     $ Tuple3'
                         (i + 1)
                         (w + 1)
                         (headCheck i q (w + 1) & dqloop (i, a))
-            Just _ ->
-                return
-                    $ Partial
-                    $ Tuple3' (i + 1) w (headCheck i q w & dqloop (i,a))
+
+    step (Tuple3' i w q) (Replace new _) =
+        return
+            $ Partial
+            $ Tuple3' (i + 1) w (headCheck i q w & dqloop (i, new))
 
     {-# INLINE headCheck #-}
     headCheck i q w =
@@ -189,14 +188,14 @@ windowMinimum = Scanl step initial extract extract
 
 -- | The maximum element in a rolling window.
 --
--- For smaller window sizes (< 30) Streamly.Internal.Data.Fold.windowMaximum performs
--- better.  If you want to compute the maximum of the entire stream
+-- For smaller window sizes (< 30) Streamly.Internal.Data.Fold.windowMaximum
+-- performs better.  If you want to compute the maximum of the entire stream
 -- Streamly.Data.Fold.maximum from streamly package would be much faster.
 --
 -- /Time/: \(\mathcal{O}(n*w)\) where \(w\) is the window size.
 --
 {-# INLINE windowMaximum #-}
-windowMaximum :: (Monad m, Ord a) => Scanl m (a, Maybe a) a
+windowMaximum :: (Monad m, Ord a) => Scanl m (Incr a) a
 windowMaximum = Scanl step initial extract extract
 
     where
@@ -206,19 +205,18 @@ windowMaximum = Scanl step initial extract extract
             $ Partial
             $ Tuple3' (0 :: Int) (0 :: Int) (mempty :: Deque.Deque (Int, a))
 
-    step (Tuple3' i w q) (a, ma) =
-        case ma of
-            Nothing ->
-                return
-                    $ Partial
-                    $ Tuple3'
-                        (i + 1)
-                        (w + 1)
-                        (headCheck i q (w + 1) & dqloop (i, a))
-            Just _ ->
-                return
-                    $ Partial
-                    $ Tuple3' (i + 1) w (headCheck i q w & dqloop (i,a))
+    step (Tuple3' i w q) (Insert a) =
+        return
+            $ Partial
+            $ Tuple3'
+                (i + 1)
+                (w + 1)
+                (headCheck i q (w + 1) & dqloop (i, a))
+
+    step (Tuple3' i w q) (Replace new _) =
+        return
+            $ Partial
+            $ Tuple3' (i + 1) w (headCheck i q w & dqloop (i, new))
 
     {-# INLINE headCheck #-}
     headCheck i q w =
@@ -280,8 +278,7 @@ meanReplace n oldMean oldItem newItem =
 --
 -- /Internal/
 {-# INLINE windowWelfordMean #-}
-windowWelfordMean :: forall m a. (Monad m, Fractional a) =>
-    Scanl m (a, Maybe a) a
+windowWelfordMean :: forall m a. (Monad m, Fractional a) => Scanl m (Incr a) a
 windowWelfordMean = Scanl step initial extract extract
 
     where
@@ -293,12 +290,11 @@ windowWelfordMean = Scanl step initial extract extract
                 (0 :: a)   -- running mean
                 (0 :: Int) -- count of items in the window
 
-    step (Tuple' oldMean w) (new, mOld) =
-        return
-            $ Partial
-            $ case mOld of
-                Nothing -> Tuple' (meanAdd w oldMean new) (w + 1)
-                Just old -> Tuple' (meanReplace w oldMean old new) w
+    step (Tuple' oldMean w) (Insert new) =
+        return $ Partial $ Tuple' (meanAdd w oldMean new) (w + 1)
+
+    step (Tuple' oldMean w) (Replace new old) =
+        return $ Partial $ Tuple' (meanReplace w oldMean old new) w
 
     extract (Tuple' x _) = return x
 
@@ -322,9 +318,9 @@ windowWelfordMean = Scanl step initial extract extract
 --
 -- /Time/: \(\mathcal{O}(n)\)
 {-# INLINE windowRawMoment #-}
-windowRawMoment :: (Monad m, Fractional a) => Int -> Scanl m (a, Maybe a) a
+windowRawMoment :: (Monad m, Fractional a) => Int -> Scanl m (Incr a) a
 windowRawMoment k =
-    Scanl.teeWith (/) (Scanl.windowPowerSum k) Scanl.windowLength
+    Scanl.teeWith (/) (Scanl.incrPowerSum k) Scanl.incrCount
 
 -- | Like 'rawMoment' but powers can be negative or fractional. This is
 -- slower than 'rawMoment' for positive intergal powers.
@@ -332,9 +328,9 @@ windowRawMoment k =
 -- >>> rawMomentFrac p = Fold.teeWith (/) (Fold.windowPowerSumFrac p) Fold.windowLength
 --
 {-# INLINE windowRawMomentFrac #-}
-windowRawMomentFrac :: (Monad m, Floating a) => a -> Scanl m (a, Maybe a) a
+windowRawMomentFrac :: (Monad m, Floating a) => a -> Scanl m (Incr a) a
 windowRawMomentFrac k =
-    Scanl.teeWith (/) (Scanl.windowPowerSumFrac k) Scanl.windowLength
+    Scanl.teeWith (/) (Scanl.incrPowerSumFrac k) Scanl.incrCount
 
 -- XXX Overflow can happen when large powers or large numbers are used. We can
 -- keep a running mean instead of running sum but that won't mitigate the
@@ -355,7 +351,7 @@ windowRawMomentFrac k =
 -- See https://en.wikipedia.org/wiki/Generalized_mean
 --
 {-# INLINE windowPowerMean #-}
-windowPowerMean :: (Monad m, Floating a) => Int -> Scanl m (a, Maybe a) a
+windowPowerMean :: (Monad m, Floating a) => Int -> Scanl m (Incr a) a
 windowPowerMean k = (** (1 / fromIntegral k)) <$> windowRawMoment k
 
 -- | Like 'powerMean' but powers can be negative or fractional. This is
@@ -364,7 +360,7 @@ windowPowerMean k = (** (1 / fromIntegral k)) <$> windowRawMoment k
 -- >>> powerMeanFrac k = (** (1 / k)) <$> rawMomentFrac k
 --
 {-# INLINE windowPowerMeanFrac #-}
-windowPowerMeanFrac :: (Monad m, Floating a) => a -> Scanl m (a, Maybe a) a
+windowPowerMeanFrac :: (Monad m, Floating a) => a -> Scanl m (Incr a) a
 windowPowerMeanFrac k = (** (1 / k)) <$> windowRawMomentFrac k
 
 -- | The harmonic mean of the positive numbers \(x_1, x_2, \ldots, x_n\) is
@@ -380,10 +376,10 @@ windowPowerMeanFrac k = (** (1 / k)) <$> windowRawMomentFrac k
 -- See https://en.wikipedia.org/wiki/Harmonic_mean .
 --
 {-# INLINE windowHarmonicMean #-}
-windowHarmonicMean :: (Monad m, Fractional a) => Scanl m (a, Maybe a) a
+windowHarmonicMean :: (Monad m, Fractional a) => Scanl m (Incr a) a
 windowHarmonicMean =
     Scanl.teeWith (/)
-        Scanl.windowLength (Scanl.windowLmap recip Scanl.windowSum)
+        Scanl.incrCount (Scanl.lmap (fmap recip) Scanl.incrSum)
 
 -- | Geometric mean, defined as:
 --
@@ -399,8 +395,8 @@ windowHarmonicMean =
 --
 -- See https://en.wikipedia.org/wiki/Geometric_mean .
 {-# INLINE windowGeometricMean #-}
-windowGeometricMean :: (Monad m, Floating a) => Scanl m (a, Maybe a) a
-windowGeometricMean = exp <$> Scanl.windowLmap log Scanl.windowMean
+windowGeometricMean :: (Monad m, Floating a) => Scanl m (Incr a) a
+windowGeometricMean = exp <$> Scanl.lmap (fmap log) Scanl.incrMean
 
 -- | The quadratic mean or root mean square (rms) of the numbers
 -- \(x_1, x_2, \ldots, x_n\) is defined as:
@@ -412,7 +408,7 @@ windowGeometricMean = exp <$> Scanl.windowLmap log Scanl.windowMean
 -- See https://en.wikipedia.org/wiki/Root_mean_square .
 --
 {-# INLINE windowQuadraticMean #-}
-windowQuadraticMean :: (Monad m, Floating a) => Scanl m (a, Maybe a) a
+windowQuadraticMean :: (Monad m, Floating a) => Scanl m (Incr a) a
 windowQuadraticMean = windowPowerMean 2
 
 -------------------------------------------------------------------------------
@@ -497,11 +493,14 @@ ewmaRampUpSmoothing n k1 = extract <$> Scanl.mkScanl step initial
 -- /Time/: \(\mathcal{O}(n*w)\) where \(w\) is the window size.
 --
 {-# INLINE windowRange #-}
-windowRange :: (Monad m, Num a, Ord a) => Scanl m (a, Maybe a) a
+windowRange :: (Monad m, Num a, Ord a) => Scanl m (Incr a) a
 windowRange = Scanl.teeWith (-) windowMaximum windowMinimum
 
 -- | @md n@ computes the mean absolute deviation (or mean deviation) in a
 -- sliding window of last @n@ elements in the stream.
+--
+-- The input of the scan is (incr, ring), where incr is the incremental window
+-- operation and ring is the contents of the entire window in a ring array.
 --
 -- The mean absolute deviation of the numbers \(x_1, x_2, \ldots, x_n\) is:
 --
@@ -518,21 +517,20 @@ windowRange = Scanl.teeWith (-) windowMaximum windowMinimum
 -- /Pre-release/
 {-# INLINE windowMd #-}
 windowMd ::  MonadIO m =>
-    Scanl m ((Double, Maybe Double), m (MA.MutArray Double)) Double
+    Scanl m (Incr Double, Ring.RingArray Double) Double
 windowMd =
     Scanl.rmapM computeMD
         $ Scanl.tee
-            (Scanl.lmap fst Scanl.windowMean) (Scanl.lmap snd Scanl.latest)
+            (Scanl.lmap fst Scanl.incrMean) (Scanl.lmap snd Scanl.latest)
 
     where
 
-    computeMD (mn, rng) =
-        case rng of
-            Just action -> do
-                arr <- action
+    computeMD (mn, mRng) =
+        case mRng of
+            Just rng -> do
                 Stream.fold Fold.mean
                     $ fmap (\a -> abs (mn - a))
-                    $ Stream.unfold MA.reader arr
+                    $ Ring.read rng
             Nothing -> return 0.0
 
 -- | The variance \(\sigma^2\) of a population of \(n\) equally likely values
@@ -554,10 +552,10 @@ windowMd =
 --
 -- /Time/: \(\mathcal{O}(n)\)
 {-# INLINE windowVariance #-}
-windowVariance :: (Monad m, Fractional a) => Scanl m (a, Maybe a) a
+windowVariance :: (Monad m, Fractional a) => Scanl m (Incr a) a
 windowVariance =
     Scanl.teeWith
-        (\p2 m -> p2 - m ^ (2 :: Int)) (windowRawMoment 2) Scanl.windowMean
+        (\p2 m -> p2 - m ^ (2 :: Int)) (windowRawMoment 2) Scanl.incrMean
 
 -- | Standard deviation \(\sigma\) is the square root of 'variance'.
 --
@@ -572,7 +570,7 @@ windowVariance =
 --
 -- /Time/: \(\mathcal{O}(n)\)
 {-# INLINE windowStdDev #-}
-windowStdDev :: (Monad m, Floating a) => Scanl m (a, Maybe a) a
+windowStdDev :: (Monad m, Floating a) => Scanl m (Incr a) a
 windowStdDev = sqrt <$> windowVariance
 
 -- XXX Need a tee3 operation for better performance.
@@ -600,14 +598,14 @@ windowStdDev = sqrt <$> windowVariance
 -- See https://en.wikipedia.org/wiki/Skewness .
 --
 {-# INLINE windowSkewness #-}
-windowSkewness :: (Monad m, Floating a) => Scanl m (a, Maybe a) a
+windowSkewness :: (Monad m, Floating a) => Scanl m (Incr a) a
 windowSkewness =
           (\rm3 sd mu ->
             rm3 / sd ^ (3 :: Int) - 3 * (mu / sd) - (mu / sd) ^ (3 :: Int)
           )
         <$> windowRawMoment 3
         <*> windowStdDev
-        <*> Scanl.windowMean
+        <*> Scanl.incrMean
 
 -- XXX We can compute the 2nd, 3rd, 4th raw moments by repeatedly multiplying
 -- instead of computing the powers every time.
@@ -636,7 +634,7 @@ windowSkewness =
 -- See https://en.wikipedia.org/wiki/Kurtosis .
 --
 {-# INLINE windowKurtosis #-}
-windowKurtosis :: (Monad m, Floating a) => Scanl m (a, Maybe a) a
+windowKurtosis :: (Monad m, Floating a) => Scanl m (Incr a) a
 windowKurtosis =
           (\rm4 rm3 sd mu ->
              ( 3 * mu ^ (4 :: Int)
@@ -647,7 +645,7 @@ windowKurtosis =
         <$> windowRawMoment 4
         <*> windowRawMoment 3
         <*> windowStdDev
-        <*> Scanl.windowMean
+        <*> Scanl.incrMean
 
 -------------------------------------------------------------------------------
 -- Estimation
@@ -663,9 +661,9 @@ windowKurtosis =
 -- See https://en.wikipedia.org/wiki/Bessel%27s_correction.
 --
 {-# INLINE windowSampleVariance #-}
-windowSampleVariance :: (Monad m, Fractional a) => Scanl m (a, Maybe a) a
+windowSampleVariance :: (Monad m, Fractional a) => Scanl m (Incr a) a
 windowSampleVariance =
-    Scanl.teeWith (\n s2 -> n * s2 / (n - 1)) Scanl.windowLength windowVariance
+    Scanl.teeWith (\n s2 -> n * s2 / (n - 1)) Scanl.incrCount windowVariance
 
 -- | Sample standard deviation:
 --
@@ -677,7 +675,7 @@ windowSampleVariance =
 -- .
 --
 {-# INLINE windowSampleStdDev #-}
-windowSampleStdDev :: (Monad m, Floating a) => Scanl m (a, Maybe a) a
+windowSampleStdDev :: (Monad m, Floating a) => Scanl m (Incr a) a
 windowSampleStdDev = sqrt <$> windowSampleVariance
 
 -- | Standard error of the sample mean (SEM), defined as:
@@ -690,9 +688,9 @@ windowSampleStdDev = sqrt <$> windowSampleVariance
 --
 -- /Time/: \(\mathcal{O}(n)\)
 {-# INLINE windowStdErrMean #-}
-windowStdErrMean :: (Monad m, Floating a) => Scanl m (a, Maybe a) a
+windowStdErrMean :: (Monad m, Floating a) => Scanl m (Incr a) a
 windowStdErrMean =
-    Scanl.teeWith (\sd n -> sd / sqrt n) windowSampleStdDev Scanl.windowLength
+    Scanl.teeWith (\sd n -> sd / sqrt n) windowSampleStdDev Scanl.incrCount
 
 -------------------------------------------------------------------------------
 -- Probability Distribution
@@ -709,7 +707,7 @@ windowStdErrMean =
 -- fromList [(1,1),(3,1),(4,2)]
 --
 {-# INLINE windowFrequency #-}
-windowFrequency :: (Monad m, Ord a) => Scanl m (a, Maybe a) (Map a Int)
+windowFrequency :: (Monad m, Ord a) => Scanl m (Incr a) (Map a Int)
 windowFrequency = Scanl.mkScanl step Map.empty
 
     where
@@ -719,8 +717,9 @@ windowFrequency = Scanl.mkScanl step Map.empty
         then Nothing
         else Just (v - 1)
 
-    step refCountMap (new, mOld) =
+    step refCountMap (Insert new) =
+        Map.insertWith (+) new 1 refCountMap
+
+    step refCountMap (Replace new old) =
         let m1 = Map.insertWith (+) new 1 refCountMap
-        in case mOld of
-                Just k -> Map.update decrement k m1
-                Nothing -> m1
+         in Map.update decrement old m1
