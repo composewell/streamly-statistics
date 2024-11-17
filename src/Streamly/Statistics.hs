@@ -203,7 +203,7 @@ import qualified Streamly.Data.Fold as Fold
 import qualified Streamly.Data.Array as Array
 import qualified Streamly.Data.MutArray as MA
 import qualified Streamly.Internal.Data.MutArray as MA
-    (unsafeSwapIndices, unsafeGetIndex, unsafePutIndex)
+    (unsafeSwapIndices)
 import qualified Streamly.Internal.Data.Fold as Window
 import qualified Streamly.Data.Stream as Stream
 
