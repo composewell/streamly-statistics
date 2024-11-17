@@ -93,6 +93,7 @@ common compile-options
                  -Wincomplete-uni-patterns
                  -Wredundant-constraints
                  -Wnoncanonical-monad-instances
+                 -Wno-deprecations
                  -Rghc-timing
 
 common optimization-options
