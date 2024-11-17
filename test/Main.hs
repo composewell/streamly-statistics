@@ -272,15 +272,15 @@ main = hspec $ do
         describe "minimum" $ do
             let scanInf = [31, 31, 31, 26, 26, 26, 26] :: [Double]
                 scanWin = [31, 31, 31, 26, 26, 26, 53] :: [Double]
-            testFunc testCase1 Stat.windowMinimum scanInf scanWin
+            testFunc testCase1 Stat.incrMinimum scanInf scanWin
         describe "maximum" $ do
             let scanInf = [31, 41, 59, 59, 59, 59, 97] :: [Double]
                 scanWin = [31, 41, 59, 59, 59, 58, 97] :: [Double]
-            testFunc testCase1 Stat.windowMaximum scanInf scanWin
+            testFunc testCase1 Stat.incrMaximum scanInf scanWin
         describe "range" $ do
             let scanInf = [0, 10, 28, 33, 33, 33, 71] :: [Double]
                 scanWin = [0, 10, 28, 33, 33, 32, 44] :: [Double]
-            testFunc testCase1 Stat.windowRange scanInf scanWin
+            testFunc testCase1 Stat.incrRange scanInf scanWin
         describe "sum" $ do
             let scanInf = [1, 2, 3, 4, 5, 12] :: [Double]
                 scanWin = [1, 2, 3, 3, 3, 9] :: [Double]
@@ -292,7 +292,7 @@ main = hspec $ do
         describe "welfordMean" $ do
             let scanInf = [1, 1, 1, 1, 1, 2] :: [Double]
                 scanWin = [1, 1, 1, 1, 1, 3] :: [Double]
-            testFunc testCase2 Stat.windowWelfordMean scanInf scanWin
+            testFunc testCase2 Stat.incrWelfordMean scanInf scanWin
 
         -- Probability Distribution
         describe "frequency"

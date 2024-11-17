@@ -238,25 +238,25 @@ mkScans ::
 mkScans mkBench =
     [
       mkBench numElements "minimum (window size 100)"
-        (Scanl.incrScan 100 StatScan.windowMinimum)
+        (Scanl.incrScan 100 StatScan.incrMinimum)
     , mkBench numElements "minimum (window size 1000)"
-        (Scanl.incrScan 1000 StatScan.windowMinimum)
+        (Scanl.incrScan 1000 StatScan.incrMinimum)
     , benchWithScanSrc sourceDescendingInt numElements
         "minimum descending (window size 1000)"
-        (Scanl.incrScan 1000 StatScan.windowMinimum)
+        (Scanl.incrScan 1000 StatScan.incrMinimum)
 
     , mkBench numElements "maximum (window size 100)"
-        (Scanl.incrScan 100 StatScan.windowMaximum)
+        (Scanl.incrScan 100 StatScan.incrMaximum)
     , mkBench numElements "maximum (window size 1000)"
-        (Scanl.incrScan 1000 StatScan.windowMaximum)
+        (Scanl.incrScan 1000 StatScan.incrMaximum)
     , benchWithScanSrc sourceDescendingInt numElements
         "maximum descending (window size 1000)"
-        (Scanl.incrScan 1000 StatScan.windowMaximum)
+        (Scanl.incrScan 1000 StatScan.incrMaximum)
 
     , mkBench numElements "range (window size 100)"
-        (Scanl.incrScan 100 StatScan.windowRange)
+        (Scanl.incrScan 100 StatScan.incrRange)
     , mkBench numElements "range (window size 1000)"
-        (Scanl.incrScan 1000 StatScan.windowRange)
+        (Scanl.incrScan 1000 StatScan.incrRange)
 
     , mkBench numElements "sum (window size 100)"
         (Scanl.incrScan 100 Scanl.incrSum)
@@ -275,32 +275,32 @@ mkScans mkBench =
     , mkBench numElements "mean (Data.Fold)" Scanl.mean
 
     , mkBench numElements "welfordMean (window size 100)"
-        (Scanl.incrScan 100 StatScan.windowWelfordMean)
+        (Scanl.incrScan 100 StatScan.incrWelfordMean)
     , mkBench numElements "welfordMean (window size 1000)"
-        (Scanl.incrScan 1000 StatScan.windowWelfordMean)
+        (Scanl.incrScan 1000 StatScan.incrWelfordMean)
     , mkBench numElements "welfordMean (entire stream)"
-        (Scanl.cumulativeScan StatScan.windowWelfordMean)
+        (Scanl.cumulativeScan StatScan.incrWelfordMean)
 
     , mkBench numElements "geometricMean (window size 100)"
-        (Scanl.incrScan 100 StatScan.windowGeometricMean)
+        (Scanl.incrScan 100 StatScan.incrGeometricMean)
     , mkBench numElements "geometricMean (window size 1000)"
-        (Scanl.incrScan 1000 StatScan.windowGeometricMean)
+        (Scanl.incrScan 1000 StatScan.incrGeometricMean)
     , mkBench numElements "geometricMean (entire stream)"
-        (Scanl.cumulativeScan StatScan.windowGeometricMean)
+        (Scanl.cumulativeScan StatScan.incrGeometricMean)
 
     , mkBench numElements "harmonicMean (window size 100)"
-        (Scanl.incrScan 100 StatScan.windowHarmonicMean)
+        (Scanl.incrScan 100 StatScan.incrHarmonicMean)
     , mkBench numElements "harmonicMean (window size 1000)"
-        (Scanl.incrScan 1000 StatScan.windowHarmonicMean)
+        (Scanl.incrScan 1000 StatScan.incrHarmonicMean)
     , mkBench numElements "harmonicMean (entire stream)"
-        (Scanl.cumulativeScan StatScan.windowHarmonicMean)
+        (Scanl.cumulativeScan StatScan.incrHarmonicMean)
 
     , mkBench numElements "quadraticMean (window size 100)"
-        (Scanl.incrScan 100 StatScan.windowQuadraticMean)
+        (Scanl.incrScan 100 StatScan.incrQuadraticMean)
     , mkBench numElements "quadraticMean (window size 1000)"
-        (Scanl.incrScan 1000 StatScan.windowQuadraticMean)
+        (Scanl.incrScan 1000 StatScan.incrQuadraticMean)
     , mkBench numElements "quadraticMean (entire stream)"
-        (Scanl.cumulativeScan StatScan.windowQuadraticMean)
+        (Scanl.cumulativeScan StatScan.incrQuadraticMean)
 
     , mkBench numElements "powerSum 2 (window size 100)"
         (Scanl.incrScan 100 (Scanl.incrPowerSum 2))
@@ -308,25 +308,25 @@ mkScans mkBench =
         (Scanl.cumulativeScan (Scanl.incrPowerSum 2))
 
     , mkBench numElements "rawMoment 2 (window size 100)"
-        (Scanl.incrScan 100 (StatScan.windowRawMoment 2))
+        (Scanl.incrScan 100 (StatScan.incrRawMoment 2))
     , mkBench numElements "rawMoment 2 (entire stream)"
-        (Scanl.cumulativeScan (StatScan.windowRawMoment 2))
+        (Scanl.cumulativeScan (StatScan.incrRawMoment 2))
 
     , mkBench numElements "powerMean 1 (window size 100)"
-        (Scanl.incrScan 100 (StatScan.windowPowerMean 1))
+        (Scanl.incrScan 100 (StatScan.incrPowerMean 1))
     , mkBench numElements "powerMean 2 (window size 100)"
-        (Scanl.incrScan 100 (StatScan.windowPowerMean 2))
+        (Scanl.incrScan 100 (StatScan.incrPowerMean 2))
     , mkBench numElements "powerMean 10 (window size 100)"
-        (Scanl.incrScan 100 (StatScan.windowPowerMean 10))
+        (Scanl.incrScan 100 (StatScan.incrPowerMean 10))
 
     , mkBench numElements "powerMeanFrac (-1) (window size 100)"
-        (Scanl.incrScan 100 (StatScan.windowPowerMeanFrac (-1)))
+        (Scanl.incrScan 100 (StatScan.incrPowerMeanFrac (-1)))
     , mkBench numElements "powerMeanFrac 1 (window size 100)"
-        (Scanl.incrScan 100 (StatScan.windowPowerMeanFrac 1))
+        (Scanl.incrScan 100 (StatScan.incrPowerMeanFrac 1))
     , mkBench numElements "powerMeanFrac 2 (window size 100)"
-        (Scanl.incrScan 100 (StatScan.windowPowerMeanFrac 2))
+        (Scanl.incrScan 100 (StatScan.incrPowerMeanFrac 2))
     , mkBench numElements "powerMeanFrac 10 (window size 100)"
-        (Scanl.incrScan 100 (StatScan.windowPowerMeanFrac 10))
+        (Scanl.incrScan 100 (StatScan.incrPowerMeanFrac 10))
 
     , mkBench numElements "ewma (entire stream)"
         (StatScan.ewma 0.5)
@@ -334,31 +334,31 @@ mkScans mkBench =
         (StatScan.ewmaRampUpSmoothing 0.5 0.5)
 
     , mkBench numElements "variance (window size 100)"
-        (Scanl.incrScan 100 StatScan.windowVariance)
+        (Scanl.incrScan 100 StatScan.incrVariance)
     , mkBench numElements "variance (entire stream)"
-        (Scanl.cumulativeScan StatScan.windowVariance)
+        (Scanl.cumulativeScan StatScan.incrVariance)
     -- , mkBench numElements "variance (Data.Fold)" Fold.variance
 
     , mkBench numElements "sampleVariance (window size 100)"
-        (Scanl.incrScan 100 StatScan.windowSampleVariance)
+        (Scanl.incrScan 100 StatScan.incrSampleVariance)
     , mkBench numElements "sampleVariance (entire stream)"
-        (Scanl.cumulativeScan StatScan.windowSampleVariance)
+        (Scanl.cumulativeScan StatScan.incrSampleVariance)
 
     , mkBench numElements "stdDev (window size 100)"
-        (Scanl.incrScan 100 StatScan.windowStdDev)
+        (Scanl.incrScan 100 StatScan.incrStdDev)
     , mkBench numElements "stdDev (entire stream)"
-        (Scanl.cumulativeScan StatScan.windowStdDev)
+        (Scanl.cumulativeScan StatScan.incrStdDev)
     -- , mkBench numElements "stdDev (Data.Fold)" Fold.stdDev
 
     , mkBench numElements "sampleStdDev (window size 100)"
-        (Scanl.incrScan 100 StatScan.windowSampleStdDev)
+        (Scanl.incrScan 100 StatScan.incrSampleStdDev)
     , mkBench numElements "sampleStdDev (entire stream)"
-        (Scanl.cumulativeScan StatScan.windowSampleStdDev)
+        (Scanl.cumulativeScan StatScan.incrSampleStdDev)
 
     , mkBench numElements "stdErrMean (window size 100)"
-        (Scanl.incrScan 100 StatScan.windowStdErrMean)
+        (Scanl.incrScan 100 StatScan.incrStdErrMean)
     , mkBench numElements "stdErrMean (entire stream)"
-        (Scanl.cumulativeScan StatScan.windowStdErrMean)
+        (Scanl.cumulativeScan StatScan.incrStdErrMean)
 
 -- These benchmarks take a lot of time/memory with fusion-plugin possibly
 -- because of the use of Tee.
@@ -374,7 +374,7 @@ mkScans mkBench =
         (Scanl.cumulativeScan StatScan.windowKurtosis)
 #endif
     , mkBench numElements "md (window size 100)"
-        (Scanl.incrScanWith 100 StatScan.windowMd)
+        (Scanl.incrScanWith 100 StatScan.incrMd)
 
     ]
 

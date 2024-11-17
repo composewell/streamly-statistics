@@ -34,21 +34,21 @@ module Streamly.Statistics.Scanl
     -- | See https://en.wikipedia.org/wiki/Location_parameter .
     --
     -- See https://en.wikipedia.org/wiki/Central_tendency .
-      windowMinimum
-    , windowMaximum
-    , windowRawMoment
-    , windowRawMomentFrac
+      incrMinimum
+    , incrMaximum
+    , incrRawMoment
+    , incrRawMomentFrac
 
     -- Pythagorean means (https://en.wikipedia.org/wiki/Pythagorean_means)
-    , windowWelfordMean
-    , windowGeometricMean
-    , windowHarmonicMean
+    , incrWelfordMean
+    , incrGeometricMean
+    , incrHarmonicMean
 
-    , windowQuadraticMean
+    , incrQuadraticMean
 
     -- Generalized mean
-    , windowPowerMean
-    , windowPowerMeanFrac
+    , incrPowerMean
+    , incrPowerMeanFrac
 
     -- ** Weighted Means
     -- | Exponential Smoothing.
@@ -65,10 +65,10 @@ module Streamly.Statistics.Scanl
     -- See https://mathworld.wolfram.com/CentralMoment.html .
     --
     -- See https://en.wikipedia.org/wiki/Statistical_dispersion .
-    , windowRange
-    , windowMd
-    , windowVariance
-    , windowStdDev
+    , incrRange
+    , incrMd
+    , incrVariance
+    , incrStdDev
 
     -- ** Shape
     -- | Third and fourth order central moments are a measure of shape.
@@ -76,17 +76,17 @@ module Streamly.Statistics.Scanl
     -- See https://en.wikipedia.org/wiki/Shape_parameter .
     --
     -- See https://en.wikipedia.org/wiki/Standardized_moment .
-    , windowSkewness
-    , windowKurtosis
+    , incrSkewness
+    , incrKurtosis
 
     -- XXX Move to Statistics.Sample or Statistics.Estimation module?
     -- ** Estimation
-    , windowSampleVariance
-    , windowSampleStdDev
-    , windowStdErrMean
+    , incrSampleVariance
+    , incrSampleStdDev
+    , incrStdErrMean
 
     -- ** Probability Distribution
-    , windowFrequency
+    , incrFrequency
     )
 where
 
@@ -135,9 +135,9 @@ import Prelude hiding (length, sum, minimum, maximum)
 --
 -- /Time/: \(\mathcal{O}(n*w)\) where \(w\) is the window size.
 --
-{-# INLINE windowMinimum #-}
-windowMinimum :: (Monad m, Ord a) => Scanl m (Incr a) a
-windowMinimum = Scanl step initial extract extract
+{-# INLINE incrMinimum #-}
+incrMinimum :: (Monad m, Ord a) => Scanl m (Incr a) a
+incrMinimum = Scanl step initial extract extract
 
     where
 
@@ -194,9 +194,9 @@ windowMinimum = Scanl step initial extract extract
 --
 -- /Time/: \(\mathcal{O}(n*w)\) where \(w\) is the window size.
 --
-{-# INLINE windowMaximum #-}
-windowMaximum :: (Monad m, Ord a) => Scanl m (Incr a) a
-windowMaximum = Scanl step initial extract extract
+{-# INLINE incrMaximum #-}
+incrMaximum :: (Monad m, Ord a) => Scanl m (Incr a) a
+incrMaximum = Scanl step initial extract extract
 
     where
 
@@ -277,9 +277,9 @@ meanReplace n oldMean oldItem newItem =
 -- because we do not maintain a sum, but that is a highly unlikely corner case.
 --
 -- /Internal/
-{-# INLINE windowWelfordMean #-}
-windowWelfordMean :: forall m a. (Monad m, Fractional a) => Scanl m (Incr a) a
-windowWelfordMean = Scanl step initial extract extract
+{-# INLINE incrWelfordMean #-}
+incrWelfordMean :: forall m a. (Monad m, Fractional a) => Scanl m (Incr a) a
+incrWelfordMean = Scanl step initial extract extract
 
     where
 
@@ -317,9 +317,9 @@ windowWelfordMean = Scanl step initial extract extract
 -- /Space/: \(\mathcal{O}(1)\)
 --
 -- /Time/: \(\mathcal{O}(n)\)
-{-# INLINE windowRawMoment #-}
-windowRawMoment :: (Monad m, Fractional a) => Int -> Scanl m (Incr a) a
-windowRawMoment k =
+{-# INLINE incrRawMoment #-}
+incrRawMoment :: (Monad m, Fractional a) => Int -> Scanl m (Incr a) a
+incrRawMoment k =
     Scanl.teeWith (/) (Scanl.incrPowerSum k) Scanl.incrCount
 
 -- | Like 'rawMoment' but powers can be negative or fractional. This is
@@ -327,9 +327,9 @@ windowRawMoment k =
 --
 -- >>> rawMomentFrac p = Fold.teeWith (/) (Fold.windowPowerSumFrac p) Fold.windowLength
 --
-{-# INLINE windowRawMomentFrac #-}
-windowRawMomentFrac :: (Monad m, Floating a) => a -> Scanl m (Incr a) a
-windowRawMomentFrac k =
+{-# INLINE incrRawMomentFrac #-}
+incrRawMomentFrac :: (Monad m, Floating a) => a -> Scanl m (Incr a) a
+incrRawMomentFrac k =
     Scanl.teeWith (/) (Scanl.incrPowerSumFrac k) Scanl.incrCount
 
 -- XXX Overflow can happen when large powers or large numbers are used. We can
@@ -350,18 +350,18 @@ windowRawMomentFrac k =
 --
 -- See https://en.wikipedia.org/wiki/Generalized_mean
 --
-{-# INLINE windowPowerMean #-}
-windowPowerMean :: (Monad m, Floating a) => Int -> Scanl m (Incr a) a
-windowPowerMean k = (** (1 / fromIntegral k)) <$> windowRawMoment k
+{-# INLINE incrPowerMean #-}
+incrPowerMean :: (Monad m, Floating a) => Int -> Scanl m (Incr a) a
+incrPowerMean k = (** (1 / fromIntegral k)) <$> incrRawMoment k
 
 -- | Like 'powerMean' but powers can be negative or fractional. This is
 -- slower than 'powerMean' for positive intergal powers.
 --
 -- >>> powerMeanFrac k = (** (1 / k)) <$> rawMomentFrac k
 --
-{-# INLINE windowPowerMeanFrac #-}
-windowPowerMeanFrac :: (Monad m, Floating a) => a -> Scanl m (Incr a) a
-windowPowerMeanFrac k = (** (1 / k)) <$> windowRawMomentFrac k
+{-# INLINE incrPowerMeanFrac #-}
+incrPowerMeanFrac :: (Monad m, Floating a) => a -> Scanl m (Incr a) a
+incrPowerMeanFrac k = (** (1 / k)) <$> incrRawMomentFrac k
 
 -- | The harmonic mean of the positive numbers \(x_1, x_2, \ldots, x_n\) is
 -- defined as:
@@ -375,9 +375,9 @@ windowPowerMeanFrac k = (** (1 / k)) <$> windowRawMomentFrac k
 --
 -- See https://en.wikipedia.org/wiki/Harmonic_mean .
 --
-{-# INLINE windowHarmonicMean #-}
-windowHarmonicMean :: (Monad m, Fractional a) => Scanl m (Incr a) a
-windowHarmonicMean =
+{-# INLINE incrHarmonicMean #-}
+incrHarmonicMean :: (Monad m, Fractional a) => Scanl m (Incr a) a
+incrHarmonicMean =
     Scanl.teeWith (/)
         Scanl.incrCount (Scanl.lmap (fmap recip) Scanl.incrSum)
 
@@ -394,9 +394,9 @@ windowHarmonicMean =
 -- >>> geometricMean = exp <$> lmap log mean
 --
 -- See https://en.wikipedia.org/wiki/Geometric_mean .
-{-# INLINE windowGeometricMean #-}
-windowGeometricMean :: (Monad m, Floating a) => Scanl m (Incr a) a
-windowGeometricMean = exp <$> Scanl.lmap (fmap log) Scanl.incrMean
+{-# INLINE incrGeometricMean #-}
+incrGeometricMean :: (Monad m, Floating a) => Scanl m (Incr a) a
+incrGeometricMean = exp <$> Scanl.lmap (fmap log) Scanl.incrMean
 
 -- | The quadratic mean or root mean square (rms) of the numbers
 -- \(x_1, x_2, \ldots, x_n\) is defined as:
@@ -407,9 +407,9 @@ windowGeometricMean = exp <$> Scanl.lmap (fmap log) Scanl.incrMean
 --
 -- See https://en.wikipedia.org/wiki/Root_mean_square .
 --
-{-# INLINE windowQuadraticMean #-}
-windowQuadraticMean :: (Monad m, Floating a) => Scanl m (Incr a) a
-windowQuadraticMean = windowPowerMean 2
+{-# INLINE incrQuadraticMean #-}
+incrQuadraticMean :: (Monad m, Floating a) => Scanl m (Incr a) a
+incrQuadraticMean = incrPowerMean 2
 
 -------------------------------------------------------------------------------
 -- Weighted Means
@@ -492,9 +492,9 @@ ewmaRampUpSmoothing n k1 = extract <$> Scanl.mkScanl step initial
 --
 -- /Time/: \(\mathcal{O}(n*w)\) where \(w\) is the window size.
 --
-{-# INLINE windowRange #-}
-windowRange :: (Monad m, Num a, Ord a) => Scanl m (Incr a) a
-windowRange = Scanl.teeWith (-) windowMaximum windowMinimum
+{-# INLINE incrRange #-}
+incrRange :: (Monad m, Num a, Ord a) => Scanl m (Incr a) a
+incrRange = Scanl.teeWith (-) incrMaximum incrMinimum
 
 -- | @md n@ computes the mean absolute deviation (or mean deviation) in a
 -- sliding window of last @n@ elements in the stream.
@@ -515,10 +515,10 @@ windowRange = Scanl.teeWith (-) windowMaximum windowMinimum
 -- See https://en.wikipedia.org/wiki/Average_absolute_deviation .
 --
 -- /Pre-release/
-{-# INLINE windowMd #-}
-windowMd ::  MonadIO m =>
+{-# INLINE incrMd #-}
+incrMd ::  MonadIO m =>
     Scanl m (Incr Double, Ring.RingArray Double) Double
-windowMd =
+incrMd =
     Scanl.rmapM computeMD
         $ Scanl.tee
             (Scanl.lmap fst Scanl.incrMean) (Scanl.lmap snd Scanl.latest)
@@ -551,11 +551,11 @@ windowMd =
 -- /Space/: \(\mathcal{O}(1)\)
 --
 -- /Time/: \(\mathcal{O}(n)\)
-{-# INLINE windowVariance #-}
-windowVariance :: (Monad m, Fractional a) => Scanl m (Incr a) a
-windowVariance =
+{-# INLINE incrVariance #-}
+incrVariance :: (Monad m, Fractional a) => Scanl m (Incr a) a
+incrVariance =
     Scanl.teeWith
-        (\p2 m -> p2 - m ^ (2 :: Int)) (windowRawMoment 2) Scanl.incrMean
+        (\p2 m -> p2 - m ^ (2 :: Int)) (incrRawMoment 2) Scanl.incrMean
 
 -- | Standard deviation \(\sigma\) is the square root of 'variance'.
 --
@@ -569,9 +569,9 @@ windowVariance =
 -- /Space/: \(\mathcal{O}(1)\)
 --
 -- /Time/: \(\mathcal{O}(n)\)
-{-# INLINE windowStdDev #-}
-windowStdDev :: (Monad m, Floating a) => Scanl m (Incr a) a
-windowStdDev = sqrt <$> windowVariance
+{-# INLINE incrStdDev #-}
+incrStdDev :: (Monad m, Floating a) => Scanl m (Incr a) a
+incrStdDev = sqrt <$> incrVariance
 
 -- XXX Need a tee3 operation for better performance.
 
@@ -597,14 +597,14 @@ windowStdDev = sqrt <$> windowVariance
 --
 -- See https://en.wikipedia.org/wiki/Skewness .
 --
-{-# INLINE windowSkewness #-}
-windowSkewness :: (Monad m, Floating a) => Scanl m (Incr a) a
-windowSkewness =
+{-# INLINE incrSkewness #-}
+incrSkewness :: (Monad m, Floating a) => Scanl m (Incr a) a
+incrSkewness =
           (\rm3 sd mu ->
             rm3 / sd ^ (3 :: Int) - 3 * (mu / sd) - (mu / sd) ^ (3 :: Int)
           )
-        <$> windowRawMoment 3
-        <*> windowStdDev
+        <$> incrRawMoment 3
+        <*> incrStdDev
         <*> Scanl.incrMean
 
 -- XXX We can compute the 2nd, 3rd, 4th raw moments by repeatedly multiplying
@@ -633,18 +633,18 @@ windowSkewness =
 --
 -- See https://en.wikipedia.org/wiki/Kurtosis .
 --
-{-# INLINE windowKurtosis #-}
-windowKurtosis :: (Monad m, Floating a) => Scanl m (Incr a) a
-windowKurtosis =
+{-# INLINE incrKurtosis #-}
+incrKurtosis :: (Monad m, Floating a) => Scanl m (Incr a) a
+incrKurtosis =
           (\rm4 rm3 sd mu ->
              ( 3 * mu ^ (4 :: Int)
             + 6 * mu ^ (2 :: Int) * sd ^ (2 :: Int)
             - 4 * mu * rm3
             + rm4) / (sd ^ (4 :: Int))
           )
-        <$> windowRawMoment 4
-        <*> windowRawMoment 3
-        <*> windowStdDev
+        <$> incrRawMoment 4
+        <*> incrRawMoment 3
+        <*> incrStdDev
         <*> Scanl.incrMean
 
 -------------------------------------------------------------------------------
@@ -660,10 +660,10 @@ windowKurtosis =
 --
 -- See https://en.wikipedia.org/wiki/Bessel%27s_correction.
 --
-{-# INLINE windowSampleVariance #-}
-windowSampleVariance :: (Monad m, Fractional a) => Scanl m (Incr a) a
-windowSampleVariance =
-    Scanl.teeWith (\n s2 -> n * s2 / (n - 1)) Scanl.incrCount windowVariance
+{-# INLINE incrSampleVariance #-}
+incrSampleVariance :: (Monad m, Fractional a) => Scanl m (Incr a) a
+incrSampleVariance =
+    Scanl.teeWith (\n s2 -> n * s2 / (n - 1)) Scanl.incrCount incrVariance
 
 -- | Sample standard deviation:
 --
@@ -674,9 +674,9 @@ windowSampleVariance =
 -- See https://en.wikipedia.org/wiki/Unbiased_estimation_of_standard_deviation
 -- .
 --
-{-# INLINE windowSampleStdDev #-}
-windowSampleStdDev :: (Monad m, Floating a) => Scanl m (Incr a) a
-windowSampleStdDev = sqrt <$> windowSampleVariance
+{-# INLINE incrSampleStdDev #-}
+incrSampleStdDev :: (Monad m, Floating a) => Scanl m (Incr a) a
+incrSampleStdDev = sqrt <$> incrSampleVariance
 
 -- | Standard error of the sample mean (SEM), defined as:
 --
@@ -687,10 +687,10 @@ windowSampleStdDev = sqrt <$> windowSampleVariance
 -- /Space/: \(\mathcal{O}(1)\)
 --
 -- /Time/: \(\mathcal{O}(n)\)
-{-# INLINE windowStdErrMean #-}
-windowStdErrMean :: (Monad m, Floating a) => Scanl m (Incr a) a
-windowStdErrMean =
-    Scanl.teeWith (\sd n -> sd / sqrt n) windowSampleStdDev Scanl.incrCount
+{-# INLINE incrStdErrMean #-}
+incrStdErrMean :: (Monad m, Floating a) => Scanl m (Incr a) a
+incrStdErrMean =
+    Scanl.teeWith (\sd n -> sd / sqrt n) incrSampleStdDev Scanl.incrCount
 
 -------------------------------------------------------------------------------
 -- Probability Distribution
@@ -706,9 +706,9 @@ windowStdErrMean =
 -- >>> Stream.fold f input
 -- fromList [(1,1),(3,1),(4,2)]
 --
-{-# INLINE windowFrequency #-}
-windowFrequency :: (Monad m, Ord a) => Scanl m (Incr a) (Map a Int)
-windowFrequency = Scanl.mkScanl step Map.empty
+{-# INLINE incrFrequency #-}
+incrFrequency :: (Monad m, Ord a) => Scanl m (Incr a) (Map a Int)
+incrFrequency = Scanl.mkScanl step Map.empty
 
     where
 
