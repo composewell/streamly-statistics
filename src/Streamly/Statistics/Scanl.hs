@@ -157,7 +157,7 @@ incrMinimum = Scanl step initial extract extract
                         (w + 1)
                         (headCheck i q (w + 1) & dqloop (i, a))
 
-    step (Tuple3' i w q) (Replace new _) =
+    step (Tuple3' i w q) (Replace _ new) =
         return
             $ Partial
             $ Tuple3' (i + 1) w (headCheck i q w & dqloop (i, new))
@@ -216,7 +216,7 @@ incrMaximum = Scanl step initial extract extract
                 (w + 1)
                 (headCheck i q (w + 1) & dqloop (i, a))
 
-    step (Tuple3' i w q) (Replace new _) =
+    step (Tuple3' i w q) (Replace _ new) =
         return
             $ Partial
             $ Tuple3' (i + 1) w (headCheck i q w & dqloop (i, new))
@@ -296,7 +296,7 @@ incrWelfordMean = Scanl step initial extract extract
     step (Tuple' oldMean w) (Insert new) =
         return $ Partial $ Tuple' (meanAdd w oldMean new) (w + 1)
 
-    step (Tuple' oldMean w) (Replace new old) =
+    step (Tuple' oldMean w) (Replace old new) =
         return $ Partial $ Tuple' (meanReplace w oldMean old new) w
 
     extract (Tuple' x _) = return x
@@ -531,7 +531,7 @@ incrEwma w = Scanl step initial extract extract
         let s1 = w * x + (1 - w) * s
         return $ Partial (EwmaGo s1 (k * (1 - w)))
 
-    step (EwmaGo s k) (Replace x x0, rng) = do
+    step (EwmaGo s k) (Replace x0 x, rng) = do
         x1 <- Ring.unsafeGetIndex 0 rng
         let s1 = w * x + (1 - w) * s + k * (x1 - x0)
         return $ Partial (EwmaGo s1 k)
@@ -782,6 +782,6 @@ incrFrequency = Scanl.mkScanl step Map.empty
     step refCountMap (Insert new) =
         Map.insertWith (+) new 1 refCountMap
 
-    step refCountMap (Replace new old) =
+    step refCountMap (Replace old new) =
         let m1 = Map.insertWith (+) new 1 refCountMap
          in Map.update decrement old m1
