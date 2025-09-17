@@ -1,6 +1,6 @@
 cabal-version:       2.4
 name:                streamly-statistics
-version:             0.1.0
+version:             0.2.0
 synopsis:
     Statistical measures for finite or infinite data streams.
 description:
