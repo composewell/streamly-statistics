@@ -5,5 +5,6 @@ appveyor.yml
 cabal.project
 cabal.project.user
 cabal.project.Werror
-default.nix
 stack.yaml
+flake.lock
+flake.nix
