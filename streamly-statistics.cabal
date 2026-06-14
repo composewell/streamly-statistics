@@ -113,7 +113,7 @@ library
         Streamly.Statistics
       , Streamly.Statistics.Scanl
     build-depends:       base     >= 4.9 && < 5
-                       , streamly-core >= 0.3.0 && < 0.4.0
+                       , streamly-core >= 0.3.0 && < 0.5
                        , containers  >= 0.5   && < 0.9
                        , random >= 1.2 && < 1.4
                        , mwc-random >= 0.15 && < 0.16
