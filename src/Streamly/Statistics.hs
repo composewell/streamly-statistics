@@ -1,3 +1,6 @@
+-- We are re-exporting some deprecated functions.
+{-# OPTIONS_GHC -Wno-deprecations #-}
+
 -- |
 -- Module      : Streamly.Statistics
 -- Copyright   : (c) 2020 Composewell Technologies
