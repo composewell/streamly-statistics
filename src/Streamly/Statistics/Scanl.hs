@@ -7,25 +7,21 @@
 -- Portability : GHC
 --
 -- See "Streamly.Statistics" for general information. This module provides
--- scans instead of folds.
+-- composable incremental scans which can be used to efficiently compute online
+-- statistics in rolling or sliding windows, or cumulative statistics over the
+-- entire stream as well.
 
 {-# LANGUAGE ScopedTypeVariables #-}
 module Streamly.Statistics.Scanl
     (
     -- * Incremental Scans
-    -- | Scans of type @Scanl m (a, Maybe a) b@ are incremental sliding window
-    -- scans. An input of type @(a, Nothing)@ indicates that the input element
-    -- @a@ is being inserted in the window without ejecting an old value
-    -- increasing the window size by 1. An input of type @(a, Just a)@
-    -- indicates that the first element is being inserted in the window and the
-    -- second element is being removed from the window, the window size remains
-    -- the same. The window size can only increase and never decrease.
+    -- | Scans of type @Scanl m (Incr a) b@ are incremental sliding window
+    -- scans.
     --
-    -- You can compute the statistics over the entire stream using sliding
-    -- window folds by keeping the second element of the input tuple as
-    -- @Nothing@.
-    --
-    -- Also see "Streamly.Data.Scanl" for some basic window scans.
+    -- See "Streamly.Internal.Data.Scanl" for more details, especially the
+    -- documentation of 'Incr' type and 'incrScan' and 'cumulativeScan'
+    -- functions. Additional incremental scans can also be found in that
+    -- module.
 
     -- * Summary Statistics
     -- | See https://en.wikipedia.org/wiki/Summary_statistics .

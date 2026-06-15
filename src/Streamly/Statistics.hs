@@ -71,87 +71,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Streamly.Statistics
     (
-    -- * Incremental Folds
-    -- | Folds of type @Fold m (a, Maybe a) b@ are incremental sliding window
-    -- folds. An input of type @(a, Nothing)@ indicates that the input element
-    -- @a@ is being inserted in the window without ejecting an old value
-    -- increasing the window size by 1. An input of type @(a, Just a)@
-    -- indicates that the first element is being inserted in the window and the
-    -- second element is being removed from the window, the window size remains
-    -- the same. The window size can only increase and never decrease.
-    --
-    -- You can compute the statistics over the entire stream using sliding
-    -- window folds by keeping the second element of the input tuple as
-    -- @Nothing@.
-    --
-      lmap
-    , Window.cumulative
-
-    -- * Summary Statistics
-    -- | See https://en.wikipedia.org/wiki/Summary_statistics .
-
-    -- ** Sums
-    , length
-    , sum
-    , sumInt
-    , powerSum
-
-    -- ** Location
-    -- | See https://en.wikipedia.org/wiki/Location_parameter .
-    --
-    -- See https://en.wikipedia.org/wiki/Central_tendency .
-    , minimum
-    , maximum
-    , rawMoment
-    , rawMomentFrac
-
-    -- Pythagorean means (https://en.wikipedia.org/wiki/Pythagorean_means)
-    , mean
-    , welfordMean
-    , geometricMean
-    , harmonicMean
-
-    , quadraticMean
-
-    -- Generalized mean
-    , powerMean
-    , powerMeanFrac
-
     -- ** Weighted Means
     -- | Exponential Smoothing.
-    , ewma
-    , ewmaAfterMean
-    , ewmaRampUpSmoothing
-
-    -- ** Spread
-    -- | Second order central moment is a statistical measure of dispersion.
-    -- The \(k\)th moment about the mean (or \(k\)th central moment) is defined
-    -- as:
-    --
-    -- \(\mu_k = \frac{1}{n}\sum_{i=1}^n {(x_{i}-\mu)}^k\)
-    --
-    -- See https://mathworld.wolfram.com/CentralMoment.html .
-    --
-    -- See https://en.wikipedia.org/wiki/Statistical_dispersion .
-    , range
-    , md
-    , variance
-    , stdDev
-
-    -- ** Shape
-    -- | Third and fourth order central moments are a measure of shape.
-    --
-    -- See https://en.wikipedia.org/wiki/Shape_parameter .
-    --
-    -- See https://en.wikipedia.org/wiki/Standardized_moment .
-    , skewness
-    , kurtosis
-
-    -- XXX Move to Statistics.Sample or Statistics.Estimation module?
-    -- ** Estimation
-    , sampleVariance
-    , sampleStdDev
-    , stdErrMean
+      ewmaAfterMean
 
     -- ** Resampling
     , resample
@@ -161,7 +83,6 @@ module Streamly.Statistics
     , jackKnifeStdDev
 
     -- ** Probability Distribution
-    , frequency
     , frequency'
     , mode
 
@@ -175,6 +96,42 @@ module Streamly.Statistics
 
     -- * Transforms
     , fft
+
+    -- * Deprecated
+    -- | Incremental Folds in this module have been deprecated in favor of the
+    -- incremental scans in the Scanl module.
+
+    , ewma
+    , ewmaRampUpSmoothing
+    , lmap
+    , Window.cumulative
+    , length
+    , sum
+    , sumInt
+    , powerSum
+    , minimum
+    , maximum
+    , rawMoment
+    , rawMomentFrac
+    , mean
+    , welfordMean
+    , geometricMean
+    , harmonicMean
+    , quadraticMean
+    , powerMean
+    , powerMeanFrac
+    , range
+    , md
+    , variance
+    , stdDev
+    , skewness
+    , kurtosis
+    , sampleVariance
+    , sampleStdDev
+    , stdErrMean
+    , frequency
+
+
     )
 where
 
@@ -222,25 +179,23 @@ import Prelude hiding (length, sum, minimum, maximum)
 -- Re-exports
 -------------------------------------------------------------------------------
 
--- XXX Deprecate these once the streamly functions are released.
-
--- {-# DEPRECATED lmap "Use Streamly.Data.Fold.windowLmap instead" #-}
+{-# DEPRECATED lmap "Use Streamly.Internal.Data.Scanl.incrRollingMap instead" #-}
 lmap :: (c -> a) -> Fold m (a, Maybe a) b -> Fold m (c, Maybe c) b
 lmap = Window.windowLmap
 
--- {-# DEPRECATED length "Use Streamly.Data.Fold.windowLength instead" #-}
+{-# DEPRECATED length "Use Streamly.Internal.Data.Scanl.incrCount instead" #-}
 length :: (Monad m, Num b) => Fold m (a, Maybe a) b
 length = Window.windowLength
 
--- {-# DEPRECATED sum "Use Streamly.Data.Fold.windowSum instead" #-}
+{-# DEPRECATED sum "Use Streamly.Internal.Data.Scanl.incrSum instead" #-}
 sum :: (Monad m, Num a) => Fold m (a, Maybe a) a
 sum = Window.windowSum
 
--- {-# DEPRECATED sumInt "Use Streamly.Data.Fold.windowSumInt instead" #-}
+{-# DEPRECATED sumInt "Use Streamly.Internal.Data.Scanl.incrSumInt instead" #-}
 sumInt :: (Monad m, Integral a) => Fold m (a, Maybe a) a
 sumInt = Window.windowSumInt
 
--- {-# DEPRECATED powerSum "Use Streamly.Data.Fold.windowPowerSum instead" #-}
+{-# DEPRECATED powerSum "Use Streamly.Internal.Data.Scanl.incrPowerSum instead" #-}
 powerSum :: (Monad m, Num a) => Int -> Fold m (a, Maybe a) a
 powerSum = Window.windowPowerSum
 
@@ -369,6 +324,7 @@ fft marr
 -- /Time/: \(\mathcal{O}(n*w)\) where \(w\) is the window size.
 --
 {-# INLINE minimum #-}
+{-# DEPRECATED minimum "Use Streamly.Statistics.Scanl.incrMinimum instead" #-}
 minimum :: (Monad m, Ord a) => Fold m (a, Maybe a) a
 minimum = Fold step initial extract extract
 
@@ -429,6 +385,7 @@ minimum = Fold step initial extract extract
 -- /Time/: \(\mathcal{O}(n*w)\) where \(w\) is the window size.
 --
 {-# INLINE maximum #-}
+{-# DEPRECATED maximum "Use Streamly.Statistics.Scanl.incrMaximum instead" #-}
 maximum :: (Monad m, Ord a) => Fold m (a, Maybe a) a
 maximum = Fold step initial extract extract
 
@@ -501,6 +458,7 @@ maximum = Fold step initial extract extract
 --
 -- /Time/: \(\mathcal{O}(n)\)
 {-# INLINE mean #-}
+{-# DEPRECATED mean "Use Streamly.Internal.Data.Scanl.incrMean instead" #-}
 mean :: forall m a. (Monad m, Fractional a) => Fold m (a, Maybe a) a
 mean = Window.windowMean
 
@@ -543,6 +501,7 @@ meanReplace n oldMean oldItem newItem =
 --
 -- /Internal/
 {-# INLINE welfordMean #-}
+{-# DEPRECATED welfordMean "Use Streamly.Statistics.Scanl.incrWelfordMean instead" #-}
 welfordMean :: forall m a. (Monad m, Fractional a) => Fold m (a, Maybe a) a
 welfordMean = Fold step initial extract extract
 
@@ -584,6 +543,7 @@ welfordMean = Fold step initial extract extract
 --
 -- /Time/: \(\mathcal{O}(n)\)
 {-# INLINE rawMoment #-}
+{-# DEPRECATED rawMoment "Use Streamly.Statistics.Scanl.incrRawMoment instead" #-}
 rawMoment :: (Monad m, Fractional a) => Int -> Fold m (a, Maybe a) a
 rawMoment k = Fold.teeWith (/) (Window.windowPowerSum k) Window.windowLength
 
@@ -593,6 +553,7 @@ rawMoment k = Fold.teeWith (/) (Window.windowPowerSum k) Window.windowLength
 -- >>> rawMomentFrac p = Fold.teeWith (/) (Fold.windowPowerSumFrac p) Fold.windowLength
 --
 {-# INLINE rawMomentFrac #-}
+{-# DEPRECATED rawMomentFrac "Use Streamly.Statistics.Scanl.incrRawMomentFrac instead" #-}
 rawMomentFrac :: (Monad m, Floating a) => a -> Fold m (a, Maybe a) a
 rawMomentFrac k =
     Fold.teeWith (/) (Window.windowPowerSumFrac k) Window.windowLength
@@ -616,6 +577,7 @@ rawMomentFrac k =
 -- See https://en.wikipedia.org/wiki/Generalized_mean
 --
 {-# INLINE powerMean #-}
+{-# DEPRECATED powerMean "Use Streamly.Statistics.Scanl.incrPowerMean instead" #-}
 powerMean :: (Monad m, Floating a) => Int -> Fold m (a, Maybe a) a
 powerMean k = (** (1 / fromIntegral k)) <$> rawMoment k
 
@@ -625,6 +587,7 @@ powerMean k = (** (1 / fromIntegral k)) <$> rawMoment k
 -- >>> powerMeanFrac k = (** (1 / k)) <$> rawMomentFrac k
 --
 {-# INLINE powerMeanFrac #-}
+{-# DEPRECATED powerMeanFrac "Use Streamly.Statistics.Scanl.incrPowerMeanFrac instead" #-}
 powerMeanFrac :: (Monad m, Floating a) => a -> Fold m (a, Maybe a) a
 powerMeanFrac k = (** (1 / k)) <$> rawMomentFrac k
 
@@ -641,6 +604,7 @@ powerMeanFrac k = (** (1 / k)) <$> rawMomentFrac k
 -- See https://en.wikipedia.org/wiki/Harmonic_mean .
 --
 {-# INLINE harmonicMean #-}
+{-# DEPRECATED harmonicMean "Use Streamly.Statistics.Scanl.incrHarmonicMean instead" #-}
 harmonicMean :: (Monad m, Fractional a) => Fold m (a, Maybe a) a
 harmonicMean =
     Fold.teeWith (/)
@@ -660,6 +624,7 @@ harmonicMean =
 --
 -- See https://en.wikipedia.org/wiki/Geometric_mean .
 {-# INLINE geometricMean #-}
+{-# DEPRECATED geometricMean "Use Streamly.Statistics.Scanl.incrGeometricMean instead" #-}
 geometricMean :: (Monad m, Floating a) => Fold m (a, Maybe a) a
 geometricMean = exp <$> Window.windowLmap log mean
 
@@ -673,6 +638,7 @@ geometricMean = exp <$> Window.windowLmap log mean
 -- See https://en.wikipedia.org/wiki/Root_mean_square .
 --
 {-# INLINE quadraticMean #-}
+{-# DEPRECATED quadraticMean "Use Streamly.Statistics.Scanl.incrQuadraticMean instead" #-}
 quadraticMean :: (Monad m, Floating a) => Fold m (a, Maybe a) a
 quadraticMean = powerMean 2
 
@@ -712,6 +678,7 @@ ewmaStep k x0 x1 = (1 - k) * x0 + k * x1
 -- See https://en.wikipedia.org/wiki/Exponential_smoothing
 --
 {-# INLINE ewma #-}
+{-# DEPRECATED ewma "Use Streamly.Statistics.Scanl.ewma instead" #-}
 ewma :: Monad m => Double -> Fold m Double Double
 ewma k = extract <$> Fold.foldl' step (Tuple' 0 1)
 
@@ -743,6 +710,7 @@ ewmaAfterMean n k =
 -- This is significantly faster than 'ewmaAfterMean'.
 --
 {-# INLINE ewmaRampUpSmoothing #-}
+{-# DEPRECATED ewmaRampUpSmoothing "Use Streamly.Statistics.Scanl.ewmaRampUpSmoothing instead" #-}
 ewmaRampUpSmoothing :: Monad m => Double -> Double -> Fold m Double Double
 ewmaRampUpSmoothing n k1 = extract <$> Fold.foldl' step initial
 
@@ -773,6 +741,7 @@ ewmaRampUpSmoothing n k1 = extract <$> Fold.foldl' step initial
 -- /Time/: \(\mathcal{O}(n*w)\) where \(w\) is the window size.
 --
 {-# INLINE range #-}
+{-# DEPRECATED range "Use Streamly.Statistics.Scanl.incrRange instead" #-}
 range :: (Monad m, Num a, Ord a) => Fold m (a, Maybe a) a
 range = Fold.teeWith (-) maximum minimum
 
@@ -793,6 +762,7 @@ range = Fold.teeWith (-) maximum minimum
 --
 -- /Pre-release/
 {-# INLINE md #-}
+{-# DEPRECATED md "Use Streamly.Statistics.Scanl.incrMd instead" #-}
 md ::  MonadIO m => Fold m ((Double, Maybe Double), m (MA.MutArray Double)) Double
 md =
     Fold.rmapM computeMD
@@ -828,6 +798,7 @@ md =
 --
 -- /Time/: \(\mathcal{O}(n)\)
 {-# INLINE variance #-}
+{-# DEPRECATED variance "Use Streamly.Statistics.Scanl.incrVariance instead" #-}
 variance :: (Monad m, Fractional a) => Fold m (a, Maybe a) a
 variance = Fold.teeWith (\p2 m -> p2 - m ^ (2 :: Int)) (rawMoment 2) mean
 
@@ -844,6 +815,7 @@ variance = Fold.teeWith (\p2 m -> p2 - m ^ (2 :: Int)) (rawMoment 2) mean
 --
 -- /Time/: \(\mathcal{O}(n)\)
 {-# INLINE stdDev #-}
+{-# DEPRECATED stdDev "Use Streamly.Statistics.Scanl.incrStdDev instead" #-}
 stdDev :: (Monad m, Floating a) => Fold m (a, Maybe a) a
 stdDev = sqrt <$> variance
 
@@ -870,6 +842,7 @@ stdDev = sqrt <$> variance
 -- See https://en.wikipedia.org/wiki/Skewness .
 --
 {-# INLINE skewness #-}
+{-# DEPRECATED skewness "Use Streamly.Statistics.Scanl.incrSkewness instead" #-}
 skewness :: (Monad m, Floating a) => Fold m (a, Maybe a) a
 skewness =
     unTee
@@ -906,6 +879,7 @@ skewness =
 -- See https://en.wikipedia.org/wiki/Kurtosis .
 --
 {-# INLINE kurtosis #-}
+{-# DEPRECATED kurtosis "Use Streamly.Statistics.Scanl.incrKurtosis instead" #-}
 kurtosis :: (Monad m, Floating a) => Fold m (a, Maybe a) a
 kurtosis =
     unTee
@@ -934,6 +908,7 @@ kurtosis =
 -- See https://en.wikipedia.org/wiki/Bessel%27s_correction.
 --
 {-# INLINE sampleVariance #-}
+{-# DEPRECATED sampleVariance "Use Streamly.Statistics.Scanl.incrSampleVariance instead" #-}
 sampleVariance :: (Monad m, Fractional a) => Fold m (a, Maybe a) a
 sampleVariance =
     Fold.teeWith (\n s2 -> n * s2 / (n - 1)) Window.windowLength variance
@@ -948,6 +923,7 @@ sampleVariance =
 -- .
 --
 {-# INLINE sampleStdDev #-}
+{-# DEPRECATED sampleStdDev "Use Streamly.Statistics.Scanl.incrSampleStdDev instead" #-}
 sampleStdDev :: (Monad m, Floating a) => Fold m (a, Maybe a) a
 sampleStdDev = sqrt <$> sampleVariance
 
@@ -961,6 +937,7 @@ sampleStdDev = sqrt <$> sampleVariance
 --
 -- /Time/: \(\mathcal{O}(n)\)
 {-# INLINE stdErrMean #-}
+{-# DEPRECATED stdErrMean "Use Streamly.Statistics.Scanl.incrStdErrMean instead" #-}
 stdErrMean :: (Monad m, Floating a) => Fold m (a, Maybe a) a
 stdErrMean =
     Fold.teeWith (\sd n -> sd / sqrt n) sampleStdDev Window.windowLength
@@ -1064,6 +1041,7 @@ foldResamples n arr fld =
 -- fromList [(1,1),(3,1),(4,2)]
 --
 {-# INLINE frequency #-}
+{-# DEPRECATED frequency "Use Streamly.Statistics.Scanl.incrFrequency instead" #-}
 frequency :: (Monad m, Ord a) => Fold m (a, Maybe a) (Map a Int)
 frequency = Fold.foldl' step Map.empty
 
