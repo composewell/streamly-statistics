@@ -169,6 +169,11 @@ import qualified Streamly.Data.Stream as Stream
 
 import Prelude hiding (length, sum, minimum, maximum)
 
+-- $setup
+-- >>> :set -Wno-deprecations
+-- >>> import qualified Streamly.Data.Stream as Stream
+-- >>> import qualified Streamly.Internal.Data.RingArray as Ring
+
 -- TODO: Overflow checks. Would be good if we can directly replace the
 -- operations with overflow checked operations.
 --
@@ -453,9 +458,9 @@ maximum = Fold step initial extract extract
 --
 -- \(\mu = \mu'_1\)
 --
--- >>> mean = rawMoment 1
--- >>> mean = powerMean 1
--- >>> mean = Fold.teeWith (/) sum length
+-- > mean = rawMoment 1
+-- > mean = powerMean 1
+-- > mean = Fold.teeWith (/) sum length
 --
 -- /Space/: \(\mathcal{O}(1)\)
 --
@@ -538,7 +543,7 @@ welfordMean = Fold step initial extract extract
 --
 -- \(\mu'_k = \frac{\sum_{i=1}^n x_{i}^k}{n}\)
 --
--- >>> rawMoment k = Fold.teeWith (/) (Fold.windowPowerSum p) Fold.windowLength
+-- > rawMoment k = Fold.teeWith (/) (Fold.windowPowerSum p) Fold.windowLength
 --
 -- See https://en.wikipedia.org/wiki/Moment_(mathematics) .
 --
@@ -553,7 +558,7 @@ rawMoment k = Fold.teeWith (/) (Window.windowPowerSum k) Window.windowLength
 -- | Like 'rawMoment' but powers can be negative or fractional. This is
 -- slower than 'rawMoment' for positive intergal powers.
 --
--- >>> rawMomentFrac p = Fold.teeWith (/) (Fold.windowPowerSumFrac p) Fold.windowLength
+-- > rawMomentFrac p = Fold.teeWith (/) (Fold.windowPowerSumFrac p) Fold.windowLength
 --
 {-# INLINE rawMomentFrac #-}
 {-# DEPRECATED rawMomentFrac "Use Streamly.Statistics.Scanl.incrRawMomentFrac instead" #-}
@@ -572,7 +577,7 @@ rawMomentFrac k =
 --
 -- \(powerMean(k) = (rawMoment(k))^\frac{1}{k}\)
 --
--- >>> powerMean k = (** (1 / fromIntegral k)) <$> rawMoment k
+-- > powerMean k = (** (1 / fromIntegral k)) <$> rawMoment k
 --
 -- All other means can be expressed in terms of power mean. It is also known as
 -- the generalized mean.
@@ -587,7 +592,7 @@ powerMean k = (** (1 / fromIntegral k)) <$> rawMoment k
 -- | Like 'powerMean' but powers can be negative or fractional. This is
 -- slower than 'powerMean' for positive intergal powers.
 --
--- >>> powerMeanFrac k = (** (1 / k)) <$> rawMomentFrac k
+-- > powerMeanFrac k = (** (1 / k)) <$> rawMomentFrac k
 --
 {-# INLINE powerMeanFrac #-}
 {-# DEPRECATED powerMeanFrac "Use Streamly.Statistics.Scanl.incrPowerMeanFrac instead" #-}
@@ -601,8 +606,8 @@ powerMeanFrac k = (** (1 / k)) <$> rawMomentFrac k
 --
 -- \(HM = \left(\frac{\sum\limits_{i=1}^n x_i^{-1}}{n}\right)^{-1}\)
 --
--- >>> harmonicMean = Fold.teeWith (/) length (lmap recip sum)
--- >>> harmonicMean = powerMeanFrac (-1)
+-- > harmonicMean = Fold.teeWith (/) length (lmap recip sum)
+-- > harmonicMean = powerMeanFrac (-1)
 --
 -- See https://en.wikipedia.org/wiki/Harmonic_mean .
 --
@@ -623,7 +628,7 @@ harmonicMean =
 --
 -- \(GM = e ^{{\frac{\sum_{i=1}^{n}\ln a_i}{n}}}\)
 --
--- >>> geometricMean = exp <$> lmap log mean
+-- > geometricMean = exp <$> lmap log mean
 --
 -- See https://en.wikipedia.org/wiki/Geometric_mean .
 {-# INLINE geometricMean #-}
@@ -636,7 +641,7 @@ geometricMean = exp <$> Window.windowLmap log mean
 --
 -- \(RMS = \sqrt{ \frac{1}{n} \left( x_1^2 + x_2^2 + \cdots + x_n^2 \right) }.\)
 --
--- >>> quadraticMean = powerMean 2
+-- > quadraticMean = powerMean 2
 --
 -- See https://en.wikipedia.org/wiki/Root_mean_square .
 --
@@ -734,7 +739,7 @@ ewmaRampUpSmoothing n k1 = extract <$> Fold.foldl' step initial
 
 -- | The difference between the maximum and minimum elements of a rolling window.
 --
--- >>> range = Fold.teeWith (-) maximum minimum
+-- > range = Fold.teeWith (-) maximum minimum
 --
 -- If you want to compute the range of the entire stream @Fold.teeWith (-)
 -- Fold.maximum Fold.minimum@ from the streamly package would be much faster.
@@ -810,7 +815,7 @@ variance = Fold.teeWith (\p2 m -> p2 - m ^ (2 :: Int)) (rawMoment 2) mean
 -- This is the population standard deviation or uncorrected sample standard
 -- deviation.
 --
--- >>> stdDev = sqrt <$> variance
+-- > stdDev = sqrt <$> variance
 --
 -- See https://en.wikipedia.org/wiki/Standard_deviation .
 --
@@ -920,7 +925,7 @@ sampleVariance =
 --
 -- \(s = \sqrt{sampleVariance}\)
 --
--- >>> sampleStdDev = sqrt <$> sampleVariance
+-- > sampleStdDev = sqrt <$> sampleVariance
 --
 -- See https://en.wikipedia.org/wiki/Unbiased_estimation_of_standard_deviation
 -- .
@@ -1039,7 +1044,7 @@ foldResamples n arr fld =
 -- | Count the frequency of elements in a sliding window.
 --
 -- >>> input = Stream.fromList [1,1,3,4,4::Int]
--- >>> f = Ring.slidingWindow 4 Statistics.frequency
+-- >>> f = Ring.slidingWindow 4 frequency
 -- >>> Stream.fold f input
 -- fromList [(1,1),(3,1),(4,2)]
 --

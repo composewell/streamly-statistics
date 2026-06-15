@@ -106,6 +106,11 @@ import qualified Streamly.Data.Stream as Stream
 
 import Prelude hiding (length, sum, minimum, maximum)
 
+-- $setup
+-- >>> import qualified Streamly.Data.Stream as Stream
+-- >>> import qualified Streamly.Internal.Data.Fold as Fold
+-- >>> import qualified Streamly.Internal.Data.Scanl as Scanl
+
 -- TODO: Overflow checks. Would be good if we can directly replace the
 -- operations with overflow checked operations.
 --
@@ -309,7 +314,7 @@ incrWelfordMean = Scanl step initial extract extract
 --
 -- \(\mu'_k = \frac{\sum_{i=1}^n x_{i}^k}{n}\)
 --
--- >>> rawMoment k = Fold.teeWith (/) (Fold.windowPowerSum p) Fold.windowLength
+-- >>> incrRawMoment k = Scanl.teeWith (/) (Scanl.incrPowerSum k) Scanl.incrCount
 --
 -- See https://en.wikipedia.org/wiki/Moment_(mathematics) .
 --
@@ -324,7 +329,7 @@ incrRawMoment k =
 -- | Like 'rawMoment' but powers can be negative or fractional. This is
 -- slower than 'rawMoment' for positive intergal powers.
 --
--- >>> rawMomentFrac p = Fold.teeWith (/) (Fold.windowPowerSumFrac p) Fold.windowLength
+-- >>> incrRawMomentFrac p = Scanl.teeWith (/) (Scanl.incrPowerSumFrac p) Scanl.incrCount
 --
 {-# INLINE incrRawMomentFrac #-}
 incrRawMomentFrac :: (Monad m, Floating a) => a -> Scanl m (Incr a) a
@@ -342,7 +347,7 @@ incrRawMomentFrac k =
 --
 -- \(powerMean(k) = (rawMoment(k))^\frac{1}{k}\)
 --
--- >>> powerMean k = (** (1 / fromIntegral k)) <$> rawMoment k
+-- >>> incrPowerMean k = (** (1 / fromIntegral k)) <$> incrRawMoment k
 --
 -- All other means can be expressed in terms of power mean. It is also known as
 -- the generalized mean.
@@ -356,7 +361,7 @@ incrPowerMean k = (** (1 / fromIntegral k)) <$> incrRawMoment k
 -- | Like 'powerMean' but powers can be negative or fractional. This is
 -- slower than 'powerMean' for positive intergal powers.
 --
--- >>> powerMeanFrac k = (** (1 / k)) <$> rawMomentFrac k
+-- >>> incrPowerMeanFrac k = (** (1 / k)) <$> incrRawMomentFrac k
 --
 {-# INLINE incrPowerMeanFrac #-}
 incrPowerMeanFrac :: (Monad m, Floating a) => a -> Scanl m (Incr a) a
@@ -369,8 +374,8 @@ incrPowerMeanFrac k = (** (1 / k)) <$> incrRawMomentFrac k
 --
 -- \(HM = \left(\frac{\sum\limits_{i=1}^n x_i^{-1}}{n}\right)^{-1}\)
 --
--- >>> harmonicMean = Fold.teeWith (/) length (lmap recip sum)
--- >>> harmonicMean = powerMeanFrac (-1)
+-- >>> incrHarmonicMean = Scanl.teeWith (/) Scanl.incrCount (Scanl.lmap (fmap recip) Scanl.incrSum)
+-- >>> incrHarmonicMean = incrPowerMeanFrac (-1)
 --
 -- See https://en.wikipedia.org/wiki/Harmonic_mean .
 --
@@ -390,7 +395,7 @@ incrHarmonicMean =
 --
 -- \(GM = e ^{{\frac{\sum_{i=1}^{n}\ln a_i}{n}}}\)
 --
--- >>> geometricMean = exp <$> lmap log mean
+-- >>> incrGeometricMean = exp <$> Scanl.lmap (fmap log) Scanl.incrMean
 --
 -- See https://en.wikipedia.org/wiki/Geometric_mean .
 {-# INLINE incrGeometricMean #-}
@@ -402,7 +407,7 @@ incrGeometricMean = exp <$> Scanl.lmap (fmap log) Scanl.incrMean
 --
 -- \(RMS = \sqrt{ \frac{1}{n} \left( x_1^2 + x_2^2 + \cdots + x_n^2 \right) }.\)
 --
--- >>> quadraticMean = powerMean 2
+-- >>> incrQuadraticMean = incrPowerMean 2
 --
 -- See https://en.wikipedia.org/wiki/Root_mean_square .
 --
@@ -541,7 +546,7 @@ incrEwma w = Scanl step initial extract extract
 
 -- | The difference between the maximum and minimum elements of a rolling window.
 --
--- >>> range = Fold.teeWith (-) maximum minimum
+-- >>> incrRange = Scanl.teeWith (-) incrMaximum incrMinimum
 --
 -- If you want to compute the range of the entire stream @Fold.teeWith (-)
 -- Fold.maximum Fold.minimum@ from the streamly package would be much faster.
@@ -620,7 +625,7 @@ incrVariance =
 -- This is the population standard deviation or uncorrected sample standard
 -- deviation.
 --
--- >>> stdDev = sqrt <$> variance
+-- >>> incrStdDev = sqrt <$> incrVariance
 --
 -- See https://en.wikipedia.org/wiki/Standard_deviation .
 --
@@ -727,7 +732,7 @@ incrSampleVariance =
 --
 -- \(s = \sqrt{sampleVariance}\)
 --
--- >>> sampleStdDev = sqrt <$> sampleVariance
+-- >>> incrSampleStdDev = sqrt <$> incrSampleVariance
 --
 -- See https://en.wikipedia.org/wiki/Unbiased_estimation_of_standard_deviation
 -- .
@@ -760,8 +765,7 @@ incrStdErrMean =
 -- | Count the frequency of elements in a sliding window.
 --
 -- >>> input = Stream.fromList [1,1,3,4,4::Int]
--- >>> f = Ring.slidingWindow 4 Statistics.frequency
--- >>> Stream.fold f input
+-- >>> Stream.fold (Fold.fromScanl (Scanl.incrScan 4 incrFrequency)) input
 -- fromList [(1,1),(3,1),(4,2)]
 --
 {-# INLINE incrFrequency #-}
