@@ -1,5 +1,3 @@
-{-# LANGUAGE TupleSections #-}
-
 import Control.Monad.IO.Class (liftIO)
 import Data.Complex (Complex ((:+)))
 import Data.Functor.Classes (liftEq2)
@@ -18,7 +16,7 @@ import qualified Data.Vector as V
 import qualified Statistics.Sample.Powers as STAT
 import qualified Statistics.Transform as STAT
 import qualified Streamly.Data.Array as Array
-import qualified Streamly.Data.Fold as Fold
+import qualified Streamly.Internal.Data.Fold as Fold
 import qualified Streamly.Data.MutArray as MA
 import qualified Streamly.Internal.Data.RingArray as Ring
 import qualified Streamly.Data.Stream as Stream
@@ -61,7 +59,7 @@ jackStdDevRes =
 
 testDistributions
     :: (STAT.Powers -> Double)
-    -> Fold.Fold IO (Double, Maybe Double) Double
+    -> Scanl.Scanl IO (Incr Double) Double
     -> Property
 testDistributions func fld =
     forAll (chooseInt (1, 1000)) $ \list_length ->
@@ -71,22 +69,22 @@ testDistributions func fld =
                 let var2 = func . STAT.powers 2 $ V.fromList ls
                     strm = S.fromList ls
                 var1 <-
-                    liftIO $ S.fold (Ring.slidingWindow list_length fld) strm
+                    liftIO $ S.fold (Fold.fromScanl (Scanl.incrScan list_length fld)) strm
                 assert (validate $ abs (var1 - var2))
 
 testVariance :: Property
-testVariance = testDistributions STAT.variance variance
+testVariance = testDistributions STAT.variance Stat.incrVariance
 
 testStdDev :: Property
-testStdDev = testDistributions STAT.stdDev stdDev
+testStdDev = testDistributions STAT.stdDev Stat.incrStdDev
 
 testFuncMD ::
-    Fold.Fold IO ((Double, Maybe Double), IO (MA.MutArray Double)) Double -> Spec
+    Scanl.Scanl IO (Incr Double, Ring.RingArray Double) Double -> Spec
 testFuncMD f = do
                 let c = S.fromList [10.0, 11.0, 12.0, 14.0]
-                a1 <- runIO $ S.fold (Ring.slidingWindowWith 2 f) c
-                a2 <- runIO $ S.fold (Ring.slidingWindowWith 3 f) c
-                a3 <- runIO $ S.fold (Ring.slidingWindowWith 4 f) c
+                a1 <- runIO $ S.fold (Fold.fromScanl (Scanl.incrScanWith 2 f)) c
+                a2 <- runIO $ S.fold (Fold.fromScanl (Scanl.incrScanWith 3 f)) c
+                a3 <- runIO $ S.fold (Fold.fromScanl (Scanl.incrScanWith 4 f)) c
                 it ("MD should be 1.0 , 1.1111111111111114 , 1.25 but actual is "
                     ++ show a1 ++ " " ++ show a2 ++ " " ++ show a3)
                     (  validate (abs (a1 - 1.0))
@@ -98,7 +96,7 @@ testFuncKurt :: Spec
 testFuncKurt = do
     let c = S.fromList
             [21.3 :: Double, 38.4, 12.7, 41.6]
-    krt <- runIO $ S.fold (Ring.slidingWindow 4 kurtosis) c
+    krt <- runIO $ S.fold (Fold.fromScanl (Scanl.incrScan 4 Stat.incrKurtosis)) c
     it ( "kurtosis should be 1.2762447351370185 Actual is " ++
         show krt
         )
@@ -219,8 +217,8 @@ main = hspec $ do
             deviationLimit = 1
             testFunc f = do
                 let c = S.fromList input
-                a <- runIO $ S.fold (Ring.slidingWindow winSize f) c
-                b <- runIO $ S.fold f $ S.take winSize $ fmap (, Nothing) c
+                a <- runIO $ S.fold (Fold.fromScanl (Scanl.incrScan winSize f)) c
+                b <- runIO $ S.fold (Fold.fromScanl f) $ S.take winSize $ fmap Insert c
                 let c1 = a - b
                 it ("deviation " ++ show c1 ++ " should not be more than "
                     ++ show deviationLimit
@@ -229,9 +227,9 @@ main = hspec $ do
                     )
                     $ c1 >= -1 * deviationLimit && c1 <= deviationLimit
 
-        describe "Sum" $ testFunc sum
-        describe "mean" $ testFunc mean
-        describe "welfordMean" $ testFunc welfordMean
+        describe "Sum" $ testFunc Scanl.incrSum
+        describe "mean" $ testFunc Scanl.incrMean
+        describe "welfordMean" $ testFunc Stat.incrWelfordMean
 
     describe "Correctness" $ do
         let winSize = 3
@@ -266,7 +264,7 @@ main = hspec $ do
             testFoldResamples 6 sampleList
 
         -- Spread/Mean
-        describe "MD" $ testFuncMD md
+        describe "MD" $ testFuncMD Stat.incrMd
         describe "Kurt" testFuncKurt
         prop "fft" testFFT
         describe "minimum" $ do
