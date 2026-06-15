@@ -224,7 +224,7 @@ isPower2 n = n .&. (n - 1) == 0
 --
 {-# INLINE _power2 #-}
 _power2 :: Int -> Int
-_power2 n = shiftL 1 n
+_power2 = shiftL 1
 
 -- | Create a bit mask with lower n bits 0 and the rest as 1.
 --
@@ -291,7 +291,7 @@ fft marr
         | l == log2len = return ()
         | otherwise = do
             let !l2 = twice l1
-                !e  = -6.283185307179586/fromIntegral l2
+                !e  = -(6.283185307179586/fromIntegral l2)
                 flight j !a | j == l1   = stage (l + 1) l2
                             | otherwise = do
                     let butterfly i | i >= len  = flight (j + 1) (a + e)
@@ -710,7 +710,7 @@ ewma k = extract <$> Fold.foldl' step (Tuple' 0 1)
 {-# INLINE ewmaAfterMean #-}
 ewmaAfterMean :: Monad m => Int -> Double -> Fold m Double Double
 ewmaAfterMean n k =
-    Fold.concatMap (\i -> (Fold.foldl' (ewmaStep k) i)) (Fold.take n Fold.mean)
+    Fold.concatMap (Fold.foldl' (ewmaStep k)) (Fold.take n Fold.mean)
 
 -- | @ewma n k@ is like 'ewma' but uses 1 as the initial smoothing factor and
 -- then exponentially smooths it to @k@ using @n@ as the smoothing factor.
@@ -783,8 +783,7 @@ md =
             Just action -> do
                 arr <- action
                 Stream.fold Fold.mean
-                    $ fmap (\a -> abs (mn - a))
-                    $ Stream.unfold MA.reader arr
+                    $ (\a -> abs (mn - a)) <$> Stream.unfold MA.reader arr
             Nothing -> return 0.0
 
 -- | The variance \(\sigma^2\) of a population of \(n\) equally likely values
@@ -970,7 +969,7 @@ jackKnifeMean :: (Monad m, Fractional a, Unbox a) => Array a -> Stream m a
 jackKnifeMean arr = do
     let len = fromIntegral (Array.length arr - 1)
         s = foldArray Fold.sum arr
-     in fmap (\b -> (s - b) / len) $ Array.read arr
+     in (\b -> (s - b) / len) <$> Array.read arr
 
 -- | Given an array of @n@ items, compute variance of @(n - 1)@ items at a time,
 -- producing a stream of all possible variance values omitting a different item
@@ -984,7 +983,7 @@ jackKnifeVariance arr = do
         foldSums (s, s2) x = (s + x, s2 + x ^ (2 :: Int))
         (sum1, sum2) = foldArray (Fold.foldl' foldSums (0.0, 0.0)) arr
         var x = (sum2 - x ^ (2 :: Int)) / len -  ((sum1 - x) / len) ^ (2::Int)
-     in fmap var $ Array.read arr
+     in var <$> Array.read arr
 
 -- | Standard deviation computed from 'jackKnifeVariance'.
 --
@@ -1006,7 +1005,7 @@ resample = Unfold step inject
 
     inject arr = liftIO $ do
         g <- createSystemRandom
-        return $ (g, arr, Array.length arr, 0)
+        return (g, arr, Array.length arr, 0)
 
     chooseOne g arr len = do
         i <- uniformRM (0, len - 1) g

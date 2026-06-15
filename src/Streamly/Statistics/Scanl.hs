@@ -592,8 +592,7 @@ incrMd =
         case mRng of
             Just rng -> do
                 Stream.fold Fold.mean
-                    $ fmap (\a -> abs (mn - a))
-                    $ Ring.read rng
+                    $ (\a -> abs (mn - a)) <$> Ring.read rng
             Nothing -> return 0.0
 
 -- | The variance \(\sigma^2\) of a population of \(n\) equally likely values
